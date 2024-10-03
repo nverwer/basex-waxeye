@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Built-By: Rakensi
+Build-Jdk: 21.0.4
+Class-Path: basex-11.2.jar SMAX-1.0.3.jar
+Main-Class: org.greenmercury.basex.xquery.functions.peg.PEGModule
+Created-By: Maven Integration for Eclipse
+
