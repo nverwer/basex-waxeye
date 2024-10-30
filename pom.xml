@@ -1,6 +1,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  
+
   <groupId>org.greenmercury</groupId>
   <artifactId>basex-waxeye</artifactId>
   <version>0.0.1-SNAPSHOT</version>
@@ -17,7 +17,7 @@
 
     <smax.groupId>org.greenmercury</smax.groupId>
     <smax.artifactId>SMAX</smax.artifactId>
-    <smax.version>1.0.3</smax.version>
+    <smax.version>1.0.4</smax.version>
 
   </properties>
 
@@ -38,13 +38,19 @@
   </dependencyManagement>
 
   <dependencies>
-    
+
     <dependency>
       <groupId>org.basex</groupId>
       <artifactId>basex</artifactId>
       <version>${basex.version}</version>
     </dependency>
-        
+
+    <dependency>
+      <groupId>org.waxeye</groupId>
+      <artifactId>waxeye</artifactId>
+      <version>1.0</version>
+    </dependency>
+
     <dependency>
       <groupId>${smax.groupId}</groupId>
       <artifactId>${smax.artifactId}</artifactId>
@@ -59,8 +65,42 @@
 
   </dependencies>
 
+
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+      </resource>
+    </resources>
+
     <plugins>
+      <!-- https://stackoverflow.com/questions/48665906/i-want-to-load-all-jars-from-my-libs-project-folder-with-maven/48670812#48670812
+           https://stackoverflow.com/questions/4955635/how-to-add-local-jar-files-to-a-maven-project
+           https://www.baeldung.com/install-local-jar-with-maven
+      -->
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-install-plugin</artifactId>
+            <configuration>
+              <groupId>org.waxeye</groupId>
+              <artifactId>waxeye</artifactId>
+              <version>1.0</version>
+              <packaging>jar</packaging>
+              <file>${basedir}/lib/waxeye.jar</file>
+              <generatePom>true</generatePom>
+            </configuration>
+            <executions>
+              <execution>
+                <id>install-waxeye-lib</id>
+                <phase>initialize</phase>
+                <goals>
+                  <goal>install-file</goal>
+                </goals>
+              </execution>
+            </executions>
+        </plugin>
+
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
         <version>2.4</version>
@@ -73,23 +113,25 @@
           </archive>
         </configuration>
       </plugin>
+      <!-- maven-shade-plugin packages SMAX -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.6.0</version>
+        <configuration>
+          <artifactSet>
+            <includes>
+              <include>${smax.groupId}:${smax.artifactId}</include>
+              <include>org.waxeye:waxeye</include>
+            </includes>
+          </artifactSet>
+        </configuration>
         <executions>
           <execution>
             <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
-            <configuration>
-              <artifactSet>
-                <includes>
-                  <include>${smax.groupId}:${smax.artifactId}</include>
-                </includes>
-              </artifactSet>
-            </configuration>
           </execution>
         </executions>
       </plugin>

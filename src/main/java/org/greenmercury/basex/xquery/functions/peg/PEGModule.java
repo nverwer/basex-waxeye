@@ -91,16 +91,15 @@ public class PEGModule extends QueryModule
     throws QueryException
     {
       super(null, funcType.declType, parameterVars(funcType, queryContext));
-      String waxeyePath;
       this.logger = logger(queryContext);
       this.funcType= funcType;
       try {
         if (grammar instanceof URL) {
-          this.parser = new WaxeyePEGParser((URL)grammar, options, waxeyePath, logger);
+          this.parser = new WaxeyePEGParser((URL)grammar, options, logger);
         } else if (grammar instanceof URI) {
-          this.parser = new WaxeyePEGParser(((URI)grammar).toURL(), options, waxeyePath, logger);
+          this.parser = new WaxeyePEGParser(((URI)grammar).toURL(), options, logger);
         } else if (grammar instanceof String) {
-          this.parser = new WaxeyePEGParser((String)grammar, options, waxeyePath, logger);
+          this.parser = new WaxeyePEGParser((String)grammar, options, logger);
         } else {
           throw new IllegalArgumentException("The first parameter ($grammar) of waxeye-peg-parser can not be a "+grammar.getClass().getName());
         }

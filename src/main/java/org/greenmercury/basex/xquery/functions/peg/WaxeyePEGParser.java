@@ -9,16 +9,24 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
+import java.net.JarURLConnection;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLClassLoader;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -50,11 +58,13 @@ import org.waxeye.parser.Parser;
  *   </li>
  *   <li>options A map with options. The following options are recognized:
  *     <ul>
+ *       <li>modular Set to true if the grammar is modular [https://waxeye.org/manual#_modular_grammars]. (Default is false.)</li>
  *       <li>complete-match Set to true if the complete input text must be parsed as one matched fragment. (Default is false.)</li>
  *       <li>adjacent-matches Set to true if the complete input must be consumed as adjacent matched fragments. (Default is false.)</li>
+ *       <li>match-whole-words Set to true to only match whole words. (Default is false.)</li>
  *       <li>parse-errors Set to true to include errors in the output and not trigger an exception. (Default is false.)</li>
  *       <li>normalize Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)</li>
- *       <li>Not yet implemented: show-parse-tree Set to true to show the parse tree in an XML comment in the output. (Default is false.)</li>
+ *       <li>show-parse-tree Not yet implemented. Set to true to show the parse tree in an XML comment in the output. (Default is false.)</li>
  *     </ul>
  *   </li>
  * </ul>
@@ -78,23 +88,23 @@ public class WaxeyePEGParser
   private Logger logger;
 
   private static Path workDir; // Work directory for all waxeye parsers.
-
-  private String waxeyePath; // Path to the Waxeye executable.
+  private static String waxeyePath; // Path to the Waxeye executable.
 
   private String internalName; // An internal name for the grammar, used for a copy of the grammar in a local file.
 
+  private boolean modular;
   private boolean completeMatch;
   private boolean adjacentMatches;
+  private boolean matchWholeWords;
   private boolean parseErrors;
   private boolean showParseTree;
-  private boolean normalize = false;
+  private boolean normalize;
 
   private Parser<?> parser;
 
 
-  public WaxeyePEGParser(URL grammar, Map<String, String> options, String waxeyePath, Logger logger)
+  public WaxeyePEGParser(URL grammar, Map<String, String> options, Logger logger)
   {
-    this.waxeyePath = waxeyePath;
     initFirst(options, logger);
     try
     {
@@ -112,9 +122,8 @@ public class WaxeyePEGParser
     }
   }
 
-  public WaxeyePEGParser(String grammar, Map<String, String> options, String waxeyePath, Logger logger)
+  public WaxeyePEGParser(String grammar, Map<String, String> options, Logger logger)
   {
-    this.waxeyePath = waxeyePath;
     initFirst(options, logger);
     try
     {
@@ -132,11 +141,18 @@ public class WaxeyePEGParser
     }
   }
 
+  /**
+   * Initialization actions for all constructors.
+   * @param options
+   * @param logger
+   */
   private void initFirst(Map<String, String> options, Logger logger)
   {
     this.logger = logger;
+    this.modular = getOption(options, "modular", false);
     this.completeMatch = getOption(options, "complete-match", false);
     this.adjacentMatches = getOption(options, "adjacent-matches", false);
+    this.matchWholeWords = getOption(options, "match-whole-words", false);
     this.parseErrors = getOption(options, "parse-errors", false);
     this.showParseTree = getOption(options, "show-parse-tree", false);
     this.normalize = getOption(options, "normalize", false);
@@ -147,6 +163,7 @@ public class WaxeyePEGParser
         .limit(8)
         .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
         .toString();
+    // Create a temporary directory, if that has not yet been done.
     synchronized (this.getClass()) {
       if (workDir == null) {
         try
@@ -158,7 +175,65 @@ public class WaxeyePEGParser
           logger.error("Work directory for "+this.getClass().getName()+" cannot be created: "+e.getMessage());
           throw new RuntimeException(e);
         }
+        try
+        {
+          // Unpack the waxeye executable and libraries.
+          //https://stackoverflow.com/questions/1386809/copy-directory-from-a-jar-file
+          URL waxeyeUrl = this.getClass().getResource("/waxeye");
+          if (waxeyeUrl == null)
+            throw new RuntimeException("The waxeye directory could not be found in the jar file.");
+          copyResourcesRecursively(workDir, waxeyeUrl);
+        }
+        catch (IOException | URISyntaxException e)
+        {
+          logger.error("Cannot copy waxeye to work directory for "+this.getClass().getName()+": "+e.getMessage());
+          throw new RuntimeException(e);
+        }
+        // Set the path to waxeye.
+        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+          waxeyePath = workDir.resolve("waxeye").resolve("waxeye.exe").toString();
+        } else {
+          waxeyePath = workDir.resolve("waxeye").resolve("bin").resolve("waxeye").toString();
+        }
       }
+    }
+  }
+
+  private void copyResourcesRecursively(Path destination,  URL url) throws IOException, URISyntaxException {
+    URLConnection connection = url.openConnection();
+    if (url.toString().startsWith("file:/")) {
+      try {
+        Path sourcePath = Paths.get(url.toURI());
+        Files.walk(sourcePath)
+          .forEach(sourceFile -> {
+            Path sourceFileRelativePath = sourcePath.getParent().relativize(sourceFile); //sourceFile.subpath(sourcePath.getNameCount() - 1, sourceFile.getNameCount());
+            Path destFile = destination.resolve(sourceFileRelativePath);
+            try {
+              Files.copy(sourceFile, destFile);
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+          });
+      } catch (RuntimeException rte) {
+        throw (IOException)rte.getCause();
+      }
+    } else if (connection instanceof JarURLConnection) {
+      JarURLConnection jarConnection = (JarURLConnection) connection;
+      JarFile jarFile = jarConnection.getJarFile();
+      for (Iterator<JarEntry> it = jarFile.entries().asIterator(); it.hasNext();) {
+        JarEntry entry = it.next();
+        if (entry.getName().startsWith(jarConnection.getEntryName())) {
+          if (!entry.isDirectory()) {
+            try (InputStream entryInputStream = jarFile.getInputStream(entry)) {
+              Files.copy(entryInputStream, Paths.get(destination.toString(), entry.getName()));
+            }
+          } else {
+            Files.createDirectories(Paths.get(destination.toString(), entry.getName()));
+          }
+        }
+      }
+    } else {
+      throw new IOException("It is not yet possible to copy from a URL like "+url.toString());
     }
   }
 
@@ -208,7 +283,7 @@ public class WaxeyePEGParser
     String javaDirName = grammarFilePath.replaceFirst("\\.[^./]*$", "").replaceAll("[^\\./_A-Za-z0-9]", "_");
     File javaCodeDir = workDir.resolve(javaDirName).toFile();
     javaCodeDir.mkdirs();
-    compileGrammar(grammarFilePath, javaCodeDir, waxeyePath);
+    compileGrammar(grammarFilePath, javaCodeDir);
     this.parser = loadParser(javaCodeDir);
   }
 
@@ -219,7 +294,7 @@ public class WaxeyePEGParser
    * @param waxeyePath
    * @throws QueryException
    */
-  private void compileGrammar(String grammarFilePath, File javaCodeDir, String waxeyePath)
+  private void compileGrammar(String grammarFilePath, File javaCodeDir)
       throws IOException, MalformedURLException, QueryException {
     String javaCodeDirPath = javaCodeDir.getAbsolutePath();
     if (!javaCodeDir.mkdirs() && !javaCodeDir.exists()) {
@@ -227,7 +302,9 @@ public class WaxeyePEGParser
     }
     /* Compile the grammar into Java code. */
     // The String[] waxeyeCommand must not contain empty strings, which will give an empty argument on OSX.
-    String[] waxeyeCommand = new String[]{waxeyePath, "-g", "java", javaCodeDirPath, "-m", grammarFilePath};
+    String[] waxeyeCommand =
+        modular ? new String[]{waxeyePath, "-g", "java", javaCodeDirPath, "-m", grammarFilePath}
+                : new String[]{waxeyePath, "-g", "java", javaCodeDirPath,       grammarFilePath};
     logger.info("Compiling waxeye grammar: "+String.join(" ", waxeyeCommand));
     // String that collects output from the waxeye process.
     StringBuilder waxeyeOutput = new StringBuilder();
@@ -238,7 +315,7 @@ public class WaxeyePEGParser
       waxeyeOutputReader = new BufferedReader(new InputStreamReader(waxeyeProcess.getInputStream()));
       waxeyeProcess.waitFor();
       for (String line = waxeyeOutputReader.readLine(); line != null; line = waxeyeOutputReader.readLine()) {
-        waxeyeOutput.append(line);
+        waxeyeOutput.append(line + "\n");
       }
       if (waxeyeProcess.exitValue() != 0) {
         throw new QueryException("Waxeye process exited with error code: "+waxeyeProcess.exitValue());
@@ -275,15 +352,17 @@ public class WaxeyePEGParser
       StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null);
     )
     {
-      Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(javaCodeDir.toPath().resolve("Parser"), javaCodeDir.toPath().resolve("Type"));
+      Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(javaCodeDir.toPath().resolve("Parser.java"), javaCodeDir.toPath().resolve("Type.java"));
       List<String> options = new ArrayList<>();
       //List<String> classpathEntries;
       //options.add("-classpath");
       //options.add(String.join(System.getProperty("path.separator"), classpathEntries));
       JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
-      boolean success = task.call();
+      boolean success = task.call(); // see https://34codefactory.medium.com/java-how-to-dynamically-compile-and-load-external-java-classes-code-factory-dd517eec9b3
       fileManager.close();
-      Parser<?> parser = (Parser<?>) Class.forName("Parser").getConstructor().newInstance();
+      URLClassLoader urlClassLoader = URLClassLoader.newInstance(new URL[] {javaCodeDir.toURI().toURL()});
+      Parser<?> parser = (Parser<?>) urlClassLoader.loadClass("Parser").getConstructor().newInstance();
+      //Parser<?> parser = (Parser<?>) Class.forName("Parser").getConstructor().newInstance();
       return parser;
     }
     catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
@@ -315,8 +394,8 @@ public class WaxeyePEGParser
     int textEnd = textFragment.length();
     StringBuilder unmatched = new StringBuilder(); // Collects unmatched characters, up to the next match.
     while (textPosition < textEnd) {
-      // Skip spaces.
-      if (allowUnmatchedText) {
+      // Skip spaces if unmatched text is allowed and only whole words are matched.
+      if (allowUnmatchedText && matchWholeWords) {
         while (textPosition < textEnd && Character.isWhitespace(textFragment.charAt(textPosition))) {
           unmatched.append(textFragment.charAt(textPosition++));
         }
@@ -325,6 +404,7 @@ public class WaxeyePEGParser
         // Match the input from textPosition.
         input.setPosition(textPosition);
         long startTime = new Date().getTime();
+        // This is where the parser does its work.
         final ParseResult<?> parseResult = parser.parse(input);
         // Parse errors are significant if completeMatch or adjacentMatches.
         if (!allowUnmatchedText && parseResult.getError() != null) {
@@ -336,30 +416,35 @@ public class WaxeyePEGParser
                 "Parsing ["+textFragment.subSequence(textPosition, Math.min(textFragment.length(), textPosition+12))+"]";
             throw new QueryException(message);
           }
-        } else if (parseResult.getAST() != null && parseResult.getAST().getChildren().size() > 0) {
-          // Insert XML elements for a non-empty match.
-          handleText(unmatched);
-          if (showParseTree) {
-            long milliSeconds = new Date().getTime() - startTime;
-            String parseTree = parseResult.toString();
-            insertComment("Parsing took " + milliSeconds + " ms.\n" + parseTree);
-          }
-          new XmlVisitor(parseResult, textFragment, textPosition, smaxDocument);
-          textPosition = parseResult.getAST().getPosition().getEndIndex();
-        } else if (allowUnmatchedText) {
-          // Skip unmatched text if there is an ignored error or empty match.
-          char unmatchedChar = textFragment.charAt(textPosition++);
-          unmatched.append(unmatchedChar);
-          // If the current character was part of a word, skip the rest of the word.
-          if (Character.isLetterOrDigit(unmatchedChar)) {
-            while (textPosition < textEnd
-                && Character.isLetterOrDigit(textFragment.charAt(textPosition))) {
-              unmatched.append(textFragment.charAt(textPosition++));
-            }
-          }
         } else {
-          // There is an empty match, apparently the grammar allows that.
-          throw new QueryException("The grammar only matches an empty string, no parsing progress can be made.");
+          boolean hasNonEmptyParseTree = parseResult.getAST() != null && parseResult.getAST().getChildren().size() > 0;
+          int nextPosition = hasNonEmptyParseTree ? parseResult.getAST().getPosition().getEndIndex() : textEnd;
+          boolean nextCharacterInWord = nextPosition < textEnd && Character.isLetterOrDigit(textFragment.charAt(nextPosition));
+          if (hasNonEmptyParseTree && (!matchWholeWords || !nextCharacterInWord)) {
+            // Insert XML elements for a non-empty match.
+            handleText(unmatched);
+            if (showParseTree) {
+              long milliSeconds = new Date().getTime() - startTime;
+              String parseTree = parseResult.toString();
+              insertComment("Parsing took " + milliSeconds + " ms.\n" + parseTree);
+            }
+            new XmlVisitor(parseResult, textFragment, textPosition, smaxDocument);
+            textPosition = nextPosition;
+          } else if (allowUnmatchedText) {
+            // Skip one character if there is an ignored error or empty match.
+            char unmatchedChar = textFragment.charAt(textPosition++);
+            unmatched.append(unmatchedChar);
+            // If only whole words are matched, and the current character was part of a word, skip the rest of the word.
+            if (matchWholeWords && Character.isLetterOrDigit(unmatchedChar)) {
+              while (textPosition < textEnd
+                  && Character.isLetterOrDigit(textFragment.charAt(textPosition))) {
+                unmatched.append(textFragment.charAt(textPosition++));
+              }
+            }
+          } else {
+            // There is no good match possible, skip to the end.
+            textPosition = textEnd;
+          }
         }
       }
     }
@@ -410,7 +495,7 @@ public class WaxeyePEGParser
     public void visitAST(IAST<?> tree) {
       Position pos = tree.getPosition();
       SmaxElement ntElement = new SmaxElement(tree.getType().toString());
-      this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, pos.getStartIndex(), pos.getEndIndex());
+      this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, pos.getStartIndex(), pos.getEndIndex(), true);
       for (IAST<?> child : tree.getChildren()) {
         child.acceptASTVisitor(this);
         }
@@ -422,8 +507,6 @@ public class WaxeyePEGParser
 
     @Override
     public void visitChar(IChar tree) {
-      //int pos = tree.getPos() - 1;
-      //tree.getValue();
     }
 
   }
