@@ -71,14 +71,9 @@ import org.waxeye.parser.Parser;
  *<p>
  * If `complete-match` is true, `adjacent-matches` is ignored because there must be only one match.
  * If `adjacent-matches` is true, there may be multiple adjacent matched fragments, but no unmatched text.
- * If `parse-errors` is true, errors are represented by <fn:error> elements in the " http://www.w3.org/2005/xpath-functions" namespace.
+ * If `parse-errors` is true, errors are represented by <fn:error> elements in the "http://www.w3.org/2005/xpath-functions" namespace.
  * If both `complete-match` and `adjacent-matches` are false, the result is a mix of unmatched text and an arbitrary number of matched fragments.
  * In this case, no parsing errors will be generated, and `parse-errors` is ignored.
- *
- *
-TO DO NEXT
-- implement options
-- implement scan, see WaxeyeParserTransformer::parseFragment
  */
 public class WaxeyePEGParser
 {
