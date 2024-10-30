@@ -1,0 +1,7 @@
+palindrome
+ <- 'a' ?:palindrome 'a'
+  | 'b' ?:palindrome 'b'
+  | 'c' ?:palindrome 'c'
+  | 'a'
+  | 'b'
+  | 'c'

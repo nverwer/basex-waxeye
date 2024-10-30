@@ -251,13 +251,13 @@ public class WaxeyePEGParser
   private void readGrammar(URL grammar) throws IOException, QueryException
   {
     String grammarFilePath = grammar.toString();
-    if (grammarFilePath.startsWith("file://")) {
-      if (grammarFilePath.matches("^file:///[A-Za-z]:/.*")) {
-        // Windoze: file:///C:/path => C:/path
-        grammarFilePath = grammarFilePath.substring("file:///".length());
+    if (grammarFilePath.startsWith("file:/")) {
+      if (grammarFilePath.matches("^file:/+[A-Za-z]:/.*")) {
+        // Windows: file:///C:/path => C:/path
+        grammarFilePath = grammarFilePath.replaceAll("^file:/+", "");
       } else {
-        // OSuX: file:///path => /path
-        grammarFilePath = grammarFilePath.substring("file://".length());
+        // Unix: file:///path => /path
+        grammarFilePath = grammarFilePath.replaceAll("^file:/+", "");
       }
       readGrammar(new File(grammarFilePath));
     } else {
@@ -316,7 +316,8 @@ public class WaxeyePEGParser
         throw new QueryException("Waxeye process exited with error code: "+waxeyeProcess.exitValue());
       }
     } catch (Throwable ex) {
-      throw new QueryException("Error compiling waxeye grammar ["+grammarFilePath+"]:\n"+ex.getMessage()+"\n"+waxeyeOutput.toString());
+      logger.error("Error compiling waxeye grammar ["+grammarFilePath+"]:\n"+waxeyeOutput.toString());
+      throw new QueryException("Error compiling waxeye grammar ["+grammarFilePath+"]: "+ex.getMessage()+". See the log file for details.");
     } finally {
         if (waxeyeProcess != null) {
           waxeyeProcess.destroyForcibly();

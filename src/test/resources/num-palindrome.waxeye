@@ -1,0 +1,7 @@
+num_palindrome
+ <- '1' ?:palindrome '1'
+  | '2' ?:palindrome '2'
+  | '3' ?:palindrome '3'
+  | '1'
+  | '2'
+  | '3'

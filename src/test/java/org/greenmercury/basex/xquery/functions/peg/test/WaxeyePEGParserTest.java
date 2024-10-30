@@ -2,6 +2,7 @@ package org.greenmercury.basex.xquery.functions.peg.test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import org.basex.query.QueryException;
@@ -182,6 +183,35 @@ public class WaxeyePEGParserTest
     parser.scan(document);
     String output = simplify(document);
     String expectedOutput = "<p>[abcbaabba]</p>";
+    assertEquals(expectedOutput, output);
+  }
+
+  @Test
+  void test_Grammar_File_1() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    ClassLoader classLoader = getClass().getClassLoader();
+    URL grammar = classLoader.getResource("palindrome.waxeye");
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<p>[abcbaabba]</p>");
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<p>[<Palindrome>abcba</Palindrome><Palindrome>abba</Palindrome>]</p>";
+    assertEquals(expectedOutput, output);
+  }
+
+  @Test
+  void test_Grammar_File_2() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    options.put("modular", "true");
+    ClassLoader classLoader = getClass().getClassLoader();
+    URL grammar = classLoader.getResource("modular.waxeye");
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<p>[abcba313abba]</p>");
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<p>[<Palindrome><Abc_palindrome>abcba</Abc_palindrome></Palindrome><Palindrome><Num_palindrome>313</Num_palindrome></Palindrome><Palindrome><Abc_palindrome>abba</Abc_palindrome></Palindrome>]</p>";
     assertEquals(expectedOutput, output);
   }
 

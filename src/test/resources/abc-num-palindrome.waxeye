@@ -1,0 +1,3 @@
+palindrome
+  <- abc_palindrome
+   | num_palindrome
