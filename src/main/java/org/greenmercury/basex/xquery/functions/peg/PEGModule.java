@@ -26,6 +26,7 @@ import org.basex.query.var.VarRef;
 import org.basex.query.var.VarScope;
 import org.basex.util.hash.IntObjMap;
 import org.basex.util.hash.TokenMap;
+import org.basex.util.log.Log;
 import org.greenmercury.smax.SmaxDocument;
 import org.greenmercury.smax.SmaxElement;
 import org.greenmercury.smax.SmaxException;
@@ -42,21 +43,22 @@ public class PEGModule extends QueryModule
    * @return a very simple logger
    */
   private static Logger logger(final QueryContext qc) {
+    Log basexLog = qc.context.log;
     return new Logger() {
       @Override
       public void info(String message)
       {
-        qc.context.log.write("INFO", message, null, qc.context);
+        basexLog.write("INFO", message, null, qc.context);
       }
       @Override
       public void warning(String message)
       {
-        qc.context.log.write("WARNING", message, null, qc.context);
+        basexLog.write("WARNING", message, null, qc.context);
       }
       @Override
       public void error(String message)
       {
-        qc.context.log.write("ERROR", message, null, qc.context);
+        basexLog.write("ERROR", message, null, qc.context);
       }};
   }
 
