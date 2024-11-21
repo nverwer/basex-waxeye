@@ -70,31 +70,33 @@ public class PEGModule extends QueryModule
   @Deterministic
   @ContextDependent
   public FuncItem waxeyPegParser(Object grammar, Map<String, String> options) throws QueryException {
-    // Types of the arguments of the generated function.
+    // Names and types of the arguments of the generated function.
     final Var[] generatedFunctionParameters = { new VarScope().addNew(new QNm("input"), SeqType.ITEM_O, queryContext, null) };
+    final Expr[] generatedFunctionParameterExprs = { new VarRef(null, generatedFunctionParameters[0]) };
+    // Result type of the generated function.
+    final SeqType generatedFunctionResultType = SeqType.NODE_ZM;
     // Type of the generated function.
-    final FuncType generatedFunctionType = FuncType.get(SeqType.NODE_ZM, generatedFunctionParameters[0].declType);
+    final FuncType generatedFunctionType = FuncType.get(generatedFunctionResultType, generatedFunctionParameters[0].declType);
     // The generated function.
-    PEGParserFunction parser = new PEGParserFunction(grammar, options, generatedFunctionType, queryContext);
+    PEGParserFunction parser = new PEGParserFunction(grammar, options, generatedFunctionResultType, generatedFunctionParameterExprs, queryContext);
     // Return a function item.
     return new FuncItem(null, parser, generatedFunctionParameters, AnnList.EMPTY, generatedFunctionType, generatedFunctionParameters.length, null);
-  }
+}
 
   /**
    * The generated PEG parser function.
    */
   private static final class PEGParserFunction extends Arr {
 
-    private final Logger logger;
     private final WaxeyePEGParser parser;
-    private final FuncType funcType;
+    private final Logger logger;
 
-    protected PEGParserFunction(Object grammar, Map<String, String> options, FuncType funcType, QueryContext queryContext)
+    protected PEGParserFunction(Object grammar, Map<String, String> options,
+        SeqType generatedFunctionResultType, Expr[] generatedFunctionParameterExprs, QueryContext queryContext)
     throws QueryException
     {
-      super(null, funcType.declType, parameterVars(funcType, queryContext));
+      super(null, generatedFunctionResultType, generatedFunctionParameterExprs);
       this.logger = logger(queryContext);
-      this.funcType= funcType;
       try {
         if (grammar instanceof URL) {
           this.parser = new WaxeyePEGParser((URL)grammar, options, logger);
@@ -110,21 +112,12 @@ public class PEGModule extends QueryModule
       }
     }
 
-    private PEGParserFunction(WaxeyePEGParser parser, FuncType funcType, QueryContext queryContext)
+    private PEGParserFunction(WaxeyePEGParser parser, Logger logger,
+        SeqType generatedFunctionResultType, Expr[] generatedFunctionParameterExprs)
     {
-      super(null, funcType.declType, parameterVars(funcType, queryContext));
-      this.funcType= funcType;
+      super(null, generatedFunctionResultType, generatedFunctionParameterExprs);
+      this.logger = logger;
       this.parser = parser;
-      this.logger = logger(queryContext);
-    }
-
-    private static Expr[] parameterVars(FuncType funcType, QueryContext queryContext)
-    {
-      Expr[] paramVars = new Expr[funcType.argTypes.length];
-      for (int i = 0; i < paramVars.length; ++i) {
-        paramVars[i] = new VarRef(null, new VarScope().addNew(new QNm("arg"+i), funcType.argTypes[i], queryContext, null));
-      }
-      return paramVars;
     }
 
     /**
@@ -183,19 +176,17 @@ public class PEGModule extends QueryModule
       return wrapper;
     }
 
-    /**
-     * I am not sure if this implementation is correct.
-     */
     @Override
     public Expr copy(CompileContext cc, IntObjMap<Var> vm)
     {
-      return copyType(new PEGParserFunction(this.parser, this.funcType, cc.qc));
+      Expr[] functionParameterExprs = copyAll(cc, vm, this.args());
+      return copyType(new PEGParserFunction(this.parser, this.logger, this.seqType(), functionParameterExprs));
     }
 
     @Override
     public void toString(QueryString qs)
     {
-      qs.token("named-entity-recognition").params(exprs);
+      qs.token("generated-PEG-parser").params(exprs);
     }
 
   }

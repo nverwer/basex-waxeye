@@ -257,7 +257,7 @@ public class WaxeyePEGParser
         grammarFilePath = grammarFilePath.replaceAll("^file:/+", "");
       } else {
         // Unix: file:///path => /path
-        grammarFilePath = grammarFilePath.replaceAll("^file:/+", "");
+        grammarFilePath = grammarFilePath.replaceAll("^file:/+", "/");
       }
       readGrammar(new File(grammarFilePath));
     } else {
