@@ -5,12 +5,13 @@
 
   <groupId>org.greenmercury</groupId>
   <artifactId>basex-waxeye</artifactId>
-  <version>1.0.3</version>
+  <version>1.0.4</version>
   <name>Waxeye PEG parser generator for BaseX</name>
   <description>This provides an XQuery function that calls a modified version of the Waxeye PEG parser generator.</description>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    
     <maven.compiler.source>11</maven.compiler.source>
     <maven.compiler.target>11</maven.compiler.target>
     <maven.compiler.release>11</maven.compiler.release>
@@ -19,8 +20,7 @@
 
     <smax.groupId>org.greenmercury</smax.groupId>
     <smax.artifactId>SMAX</smax.artifactId>
-    <smax.version>1.0.4</smax.version>
-
+    <smax.version>1.0.5</smax.version>
   </properties>
 
   <dependencyManagement>
