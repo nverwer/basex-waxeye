@@ -189,6 +189,16 @@ public class WaxeyePEGParser
           waxeyePath = workDir.resolve("waxeye").resolve("waxeye.exe").toString();
         } else {
           waxeyePath = workDir.resolve("waxeye").resolve("bin").resolve("waxeye").toString();
+          File waxeyeExecutable = new File(waxeyePath);
+          waxeyeExecutable.setExecutable(true);
+          try {
+            Files.list(workDir.resolve("waxeye").resolve("lib").resolve("plt"))
+              .filter(file -> !Files.isDirectory(file))
+              .forEach(file -> file.toFile().setExecutable(true));
+          } catch (IOException e) {
+            logger.error("Cannot set executable permission: "+e.getMessage());
+            throw new RuntimeException(e);
+          }
         }
       }
     }
@@ -356,6 +366,9 @@ public class WaxeyePEGParser
       JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
       boolean success = task.call(); // see https://34codefactory.medium.com/java-how-to-dynamically-compile-and-load-external-java-classes-code-factory-dd517eec9b3
       fileManager.close();
+      if (!success) {
+        throw new QueryException("Some generated Java files had compilation errors.");
+      }
       URLClassLoader urlClassLoader = URLClassLoader.newInstance(new URL[] {javaCodeDir.toURI().toURL()});
       Parser<?> parser = (Parser<?>) urlClassLoader.loadClass("Parser").getConstructor().newInstance();
       //Parser<?> parser = (Parser<?>) Class.forName("Parser").getConstructor().newInstance();

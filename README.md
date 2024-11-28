@@ -18,13 +18,16 @@ then restart BaseX.
 The Java code follows the integration pattern described in the [BaseX documentation](https://docs.basex.org/main/Java_Bindings#integration).
 The Java function `FuncItem waxeyPegParser(Object, Map<String, String>)`
 is available in XQuery as 
+
 ```xquery
 peg:waxey-peg-parser($grammar as (xs:string | xs:anyURI), $options as map(xs:string, xs:string))
   as function((xs:string | node())) as node()*
 ```
+
 where the `peg` namespace is `org.greenmercury.basex.xquery.functions.peg.PEGModule`.
 
 The following is an example of using the waxeye-peg-parser function in XQuery:
+
 ```xquery
 import module namespace peg='org.greenmercury.basex.xquery.functions.peg.PEGModule';
 let $grammar := ``[palindrome <- 'a' :?palindrome 'a' | 'b' ?:palindrome 'b' | 'c' ?:palindrome 'c' | 'a' | 'b' | 'c']``
@@ -34,7 +37,9 @@ let $input := ``[abcbaabba]``
 let $output := $peg($input)
 return $output
 ```
+
 This will return two elements:
+
 ```
 <Palindrome>abcba</Palindrome>
 <Palindrome>abba</Palindrome>
@@ -71,13 +76,17 @@ This element may contain descendant elements, which will be ignored by the parse
 The descendant elements are still present in the output, and are 'transparent' to the parser.
 
 For example, when parsing the input
+
 ```xml
 <r>ab<c>c</c>badabba</r>
 ```
+
 with the palindrome grammar given earlier, the output will be:
+
 ```xml
 <r><Palindrome>ab<c>c</c>ba</Palindrome>d<Palindrome>abba</Palindrome></r>
 ```
+
 XML transparency is achieved by representing the XML as a [SMAX](https://github.com/nverwer/SMAX) document.
 
 

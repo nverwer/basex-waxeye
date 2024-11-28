@@ -126,7 +126,7 @@ public class WaxeyePEGParserTest
   }
 
   @Test
-  void test_Namespaces() throws Exception
+  void test_Namespaces_1() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
     WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
@@ -134,6 +134,30 @@ public class WaxeyePEGParserTest
     parser.scan(document);
     String output = XmlString.fromSmax(document).replaceAll("<\\?.*?\\?>", "");
     String expectedOutput = "<c:c xmlns:c=\"calculator\"><Sum><Prod><Num>1</Num></Prod> + <Prod><Num>1</Num></Prod></Sum></c:c>";
+    assertEquals(expectedOutput, output);
+  }
+
+  @Test
+  void test_Namespaces_2() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<c:c xmlns:c=\"calculator\" xmlns:op=\"operator\">1 <op:plus>+</op:plus> 1</c:c>");
+    parser.scan(document);
+    String output = XmlString.fromSmax(document).replaceAll("<\\?.*?\\?>", "");
+    String expectedOutput = "<c:c xmlns:c=\"calculator\"><Sum><Prod><Num>1</Num></Prod> <op:plus xmlns:op=\"operator\">+</op:plus> <Prod><Num>1</Num></Prod></Sum></c:c>";
+    assertEquals(expectedOutput, output);
+  }
+
+  @Test
+  void test_Namespaces_3() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<c:c xmlns:c=\"calculator\" xmlns:op=\"operator\">1 <operator op:id=\"plus\">+</operator> 1</c:c>");
+    parser.scan(document);
+    String output = XmlString.fromSmax(document).replaceAll("<\\?.*?\\?>", "");
+    String expectedOutput = "<c:c xmlns:c=\"calculator\"><Sum><Prod><Num>1</Num></Prod> <operator xmlns:op=\"operator\" op:id=\"plus\">+</operator> <Prod><Num>1</Num></Prod></Sum></c:c>";
     assertEquals(expectedOutput, output);
   }
 

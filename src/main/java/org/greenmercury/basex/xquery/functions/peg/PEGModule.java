@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.Map;
 
+import org.basex.io.IO;
 import org.basex.query.CompileContext;
 import org.basex.query.QueryContext;
 import org.basex.query.QueryException;
@@ -11,12 +12,15 @@ import org.basex.query.QueryModule;
 import org.basex.query.QueryString;
 import org.basex.query.expr.Arr;
 import org.basex.query.expr.Expr;
+import org.basex.query.func.java.JavaCall;
 import org.basex.query.util.list.AnnList;
 import org.basex.query.value.Value;
+import org.basex.query.value.ValueBuilder;
 import org.basex.query.value.item.FuncItem;
 import org.basex.query.value.item.QNm;
 import org.basex.query.value.item.Str;
 import org.basex.query.value.node.ANode;
+import org.basex.query.value.node.DBNode;
 import org.basex.query.value.node.FElem;
 import org.basex.query.value.node.FNode;
 import org.basex.query.value.type.FuncType;
@@ -31,8 +35,11 @@ import org.greenmercury.smax.SmaxDocument;
 import org.greenmercury.smax.SmaxElement;
 import org.greenmercury.smax.SmaxException;
 import org.greenmercury.smax.convert.DomElement;
+import org.greenmercury.smax.convert.XmlString;
+import org.w3c.dom.DOMException;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 public class PEGModule extends QueryModule
 {
@@ -131,49 +138,37 @@ public class PEGModule extends QueryModule
       // Create a SMAX document with a <wrapper> root element around the input.
       SmaxDocument smaxDocument = null;
       if (inputValue.seqType().instanceOf(SeqType.STRING_O)) {
-        // Wrap the string in an element.
         final String inputString = ((Str)inputValue).toJava();
         final SmaxElement wrapper = new SmaxElement("wrapper").setStartPos(0).setEndPos(inputString.length());
         smaxDocument = new SmaxDocument(wrapper, inputString);
       } else if (inputValue.seqType().instanceOf(SeqType.NODE_O)) {
-        Node inputNode = ((ANode)inputValue).toJava();
-        if (inputValue.seqType().instanceOf(SeqType.DOCUMENT_NODE_O)) {
-          inputNode = inputNode.getFirstChild();
-        }
-        Element inputElement = wrap(inputNode);
-        try{
+        FElem fWrapper = (FElem) FElem.build(new QNm("wrapper")).add((ANode)inputValue).finish();
+        Element inputElement = (Element) fWrapper.toJava();
+        try {
           smaxDocument = DomElement.toSmax(inputElement);
         } catch (SmaxException e) {
           throw new QueryException(e);
         }
       } else {
-        throw new QueryException("The generated NER function accepts a string or node, but not a "+inputValue.seqType().typeString());
+        throw new QueryException("The generated function accepts a string or node, but not a "+inputValue.seqType().typeString());
       }
-      // Do Named Entity Recognition on the SMAX document.
+      // Parse the SMAX document's text content and insert new markup.
       this.parser.scan(smaxDocument);
       // Convert the SMAX document to something that BaseX can use.
+      Element outputElement;
       try {
-        Element outputElement = DomElement.documentFromSmax(smaxDocument).getDocumentElement();
-        FNode resultWrapperElement = FElem.build(outputElement, new TokenMap()).finish();
-        // Remove the wrapper element and return its contents.
-        Value result = resultWrapperElement.childIter().value(qc, null);
-        return result;
+        outputElement = DomElement.fromSmax(smaxDocument);
       } catch (Exception e) {
         throw new QueryException(e);
       }
-    }
-
-    /**
-     * The org.basex.api.dom.BXNode does not implement appendChild().
-     * Therefore, we have to make our own wrapper element, which needs to work for org.greenmercury.smax.convert.DomElement.toSmax(Element).
-     * @param node A node that must be wrapped in a "wrapper" element.
-     * @return The wrapper element.
-     */
-    private Element wrap(Node node)
-    {
-      Element wrapper = new VerySimpleElementImpl("wrapper");
-      wrapper.appendChild(node);
-      return wrapper;
+      // Convert the child node NodeList to an array, and use JavaCall.toValue to make a Value of the array.
+      NodeList wrapperChildren = outputElement.getChildNodes();
+      Node[] result = new Node[wrapperChildren.getLength()];
+      for (int i = 0; i < wrapperChildren.getLength(); ++i) {
+        result[i] = wrapperChildren.item(i);
+      }
+      Value bxResult = JavaCall.toValue(result, qc, null);
+      return bxResult;
     }
 
     @Override
