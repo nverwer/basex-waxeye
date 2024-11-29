@@ -92,28 +92,23 @@ XML transparency is achieved by representing the XML as a [SMAX](https://github.
 
 # Building and installing Waxeye
 
-A version of Waxeye is already available in 'src/main/resources`.
-The following instructions are only relevant when a new version of waxeye must be used.
-
 Waxeye is an external program, which must be compiled separately.
 We use a [modified version](https://github.com/nverwer/waxeye) of waxeye.
-Make sure that this is the version that you have cloned.
+Make sure that this is the version that you have cloned or [downloaded](https://github.com/nverwer/waxeye/archive/refs/heads/master.zip).
 
 To support both Linux / MacOS and Windows, two binaries and a jar file must be generated.
 You can do this on a Windows machine by installing WSL and Ubuntu.
-It is also possible to only support Linux / MacOS when nobody uses Windows anymore after 14 October 2025. 
 
-On both Windows and Linux, [Racket](http://racket-lang.org) must be installed.
-See the README.md of waxeye for detailed instructions.
+On both Windows and Linux, [Racket](http://racket-lang.org) and [ant](https://ant.apache.org/) must be installed.
+On Linux, `make` must also be installed.
 
 In Windows, go to the waxeye root directory (where you cloned waxeye) and execute `.\build\exe.bat`.
 This will generate a `waxeye.exe` in the waxeye root directory, and a `waxeye.jar` in the `lib` directory.
 
-In Linux / MacOS, go to the waxeye root directory (where you cloned waxeye) and execute `make compiler`.
-This will generate a `waxeye` executable in the `bin` directory, and a `waxeye.jar` in the `lib` directory.
+In Linux / MacOS, go to the waxeye root directory (where you cloned waxeye) and execute `make compiler runtime-java`.
+This will generate a `waxeye` executable in the `bin` directory, and a `waxeye.jar` (plus some libraries) in the `lib` directory.
 
-The newly generated files must now be copied into basex-waxeye.
+The most recent version of the jar file is already present in `basex-waxeye`, and you can ignore it.
+However, if you have changed something in waxeye, copy the jar file from `waxeye/lib/waxeye.jar` into `basex-waxeye/lib/waxeye.jar`, and install `basex-waxeye` again.
 
-1. Copy `waxeye/lib/waxeye.jar` to `basex-waxeye/lib/waxeye.jar`.
-
-2. Copy `waxeye/waxeye.exe`, `waxeye/bin` (directory), and `waxeye/lib` (directory) into the `basex-waxeye/src/main/resources` directory.
+The waxeye binary must be made available from the command line by appending the `waxeye/bin` directory to tha PATH environment variable.

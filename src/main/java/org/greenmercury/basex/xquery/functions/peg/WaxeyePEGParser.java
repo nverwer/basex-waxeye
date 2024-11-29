@@ -83,7 +83,7 @@ public class WaxeyePEGParser
   private Logger logger;
 
   private static Path workDir; // Work directory for all waxeye parsers.
-  private static String waxeyePath; // Path to the Waxeye executable.
+  private static String waxeyePath = "waxeye"; // Path to the Waxeye executable. Waxeye should be installed on the host system.
 
   private String internalName; // An internal name for the grammar, used for a copy of the grammar in a local file.
 
@@ -117,6 +117,7 @@ public class WaxeyePEGParser
     }
   }
 
+
   public WaxeyePEGParser(String grammar, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
@@ -135,6 +136,7 @@ public class WaxeyePEGParser
       throw new RuntimeException(e);
     }
   }
+
 
   /**
    * Initialization actions for all constructors.
@@ -170,77 +172,10 @@ public class WaxeyePEGParser
           logger.error("Work directory for "+this.getClass().getName()+" cannot be created: "+e.getMessage());
           throw new RuntimeException(e);
         }
-        try
-        {
-          // Unpack the waxeye executable and libraries.
-          //https://stackoverflow.com/questions/1386809/copy-directory-from-a-jar-file
-          URL waxeyeUrl = this.getClass().getResource("/waxeye");
-          if (waxeyeUrl == null)
-            throw new RuntimeException("The waxeye directory could not be found in the jar file.");
-          copyResourcesRecursively(workDir, waxeyeUrl);
-        }
-        catch (IOException | URISyntaxException e)
-        {
-          logger.error("Cannot copy waxeye to work directory for "+this.getClass().getName()+": "+e.getMessage());
-          throw new RuntimeException(e);
-        }
-        // Set the path to waxeye.
-        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
-          waxeyePath = workDir.resolve("waxeye").resolve("waxeye.exe").toString();
-        } else {
-          waxeyePath = workDir.resolve("waxeye").resolve("bin").resolve("waxeye").toString();
-          File waxeyeExecutable = new File(waxeyePath);
-          waxeyeExecutable.setExecutable(true);
-          try {
-            Files.list(workDir.resolve("waxeye").resolve("lib").resolve("plt"))
-              .filter(file -> !Files.isDirectory(file))
-              .forEach(file -> file.toFile().setExecutable(true));
-          } catch (IOException e) {
-            logger.error("Cannot set executable permission: "+e.getMessage());
-            throw new RuntimeException(e);
-          }
-        }
       }
     }
   }
 
-  private void copyResourcesRecursively(Path destination,  URL url) throws IOException, URISyntaxException {
-    URLConnection connection = url.openConnection();
-    if (url.toString().startsWith("file:/")) {
-      try {
-        Path sourcePath = Paths.get(url.toURI());
-        Files.walk(sourcePath)
-          .forEach(sourceFile -> {
-            Path sourceFileRelativePath = sourcePath.getParent().relativize(sourceFile); //sourceFile.subpath(sourcePath.getNameCount() - 1, sourceFile.getNameCount());
-            Path destFile = destination.resolve(sourceFileRelativePath);
-            try {
-              Files.copy(sourceFile, destFile);
-            } catch (IOException e) {
-              throw new RuntimeException(e);
-            }
-          });
-      } catch (RuntimeException rte) {
-        throw (IOException)rte.getCause();
-      }
-    } else if (connection instanceof JarURLConnection) {
-      JarURLConnection jarConnection = (JarURLConnection) connection;
-      JarFile jarFile = jarConnection.getJarFile();
-      for (Iterator<JarEntry> it = jarFile.entries().asIterator(); it.hasNext();) {
-        JarEntry entry = it.next();
-        if (entry.getName().startsWith(jarConnection.getEntryName())) {
-          if (!entry.isDirectory()) {
-            try (InputStream entryInputStream = jarFile.getInputStream(entry)) {
-              Files.copy(entryInputStream, Paths.get(destination.toString(), entry.getName()));
-            }
-          } else {
-            Files.createDirectories(Paths.get(destination.toString(), entry.getName()));
-          }
-        }
-      }
-    } else {
-      throw new IOException("It is not yet possible to copy from a URL like "+url.toString());
-    }
-  }
 
   private boolean getOption(Map<String, String> options, String key, boolean defaultValue) {
     return Optional.ofNullable(options.get(key)).map(v -> Boolean.parseBoolean(v)).orElse(defaultValue);
@@ -257,6 +192,7 @@ public class WaxeyePEGParser
     }
     readGrammar(grammarFile);
   }
+
 
   private void readGrammar(URL grammar) throws IOException, QueryException
   {
@@ -282,6 +218,7 @@ public class WaxeyePEGParser
     }
   }
 
+
   private synchronized void readGrammar(File grammar) throws IOException, QueryException
   {
     String grammarFilePath = grammar.getAbsolutePath();
@@ -296,7 +233,10 @@ public class WaxeyePEGParser
   /**
    * Compile the Waxeye grammar into Java code using the Waxeye executable.
    * This produces .java source-code files.
-   * @param waxeyePath
+   * @param grammarFilePath
+   * @param javaCodeDir
+   * @throws IOException
+   * @throws MalformedURLException
    * @throws QueryException
    */
   private void compileGrammar(String grammarFilePath, File javaCodeDir)
@@ -338,6 +278,7 @@ public class WaxeyePEGParser
     }
     logger.info(waxeyeOutput.toString());
   }
+
 
   /**
    * Compile the Java files for the grammar and loads the class-files.
@@ -460,11 +401,13 @@ public class WaxeyePEGParser
     handleText(unmatched);
   }
 
+
   private void handleText(StringBuilder sb) {
     if (sb.length() > 0) {
       sb.delete(0, sb.length());
     }
   }
+
 
   private void insertComment(String comment) {
     // Implementation requires SMAX support.
