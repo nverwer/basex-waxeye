@@ -9,24 +9,18 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
-import java.net.JarURLConnection;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -62,6 +56,7 @@ import org.waxeye.parser.Parser;
  *       <li>complete-match Set to true if the complete input text must be parsed as one matched fragment. (Default is false.)</li>
  *       <li>adjacent-matches Set to true if the complete input must be consumed as adjacent matched fragments. (Default is false.)</li>
  *       <li>match-whole-words Set to true to only match whole words. (Default is false.)</li>
+ *       <li>cache Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.</li>
  *       <li>parse-errors Set to true to include errors in the output and not trigger an exception. (Default is false.)</li>
  *       <li>normalize Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)</li>
  *       <li>show-parse-tree Not yet implemented. Set to true to show the parse tree in an XML comment in the output. (Default is false.)</li>
@@ -82,15 +77,31 @@ public class WaxeyePEGParser
 
   private Logger logger;
 
-  private static Path workDir; // Work directory for all waxeye parsers.
-  private static String waxeyePath = "waxeye"; // Path to the Waxeye executable. Waxeye should be installed on the host system.
+  // Work directory for all waxeye parsers.
+  private static Path workDir;
 
-  private String internalName; // An internal name for the grammar, used for a copy of the grammar in a local file.
+  // Path to the Waxeye executable. Waxeye should be installed on the host system.
+  private static String waxeyePath = "waxeye";
+
+  // Cache for parsers, to prevent repeated grammar compilation.
+  class ParserCacheEntry {
+    public long modified;
+    public Parser<?> parser;
+    public ParserCacheEntry(Parser<?> parser) {
+      this.modified = new Date().getTime();
+      this.parser = parser;
+    }
+  }
+  private static Map<String, ParserCacheEntry> parserCache = new HashMap<String, ParserCacheEntry>();
+
+  // An internal name for the grammar, used for a copy of the grammar in a local file.
+  private String internalName;
 
   private boolean modular;
   private boolean completeMatch;
   private boolean adjacentMatches;
   private boolean matchWholeWords;
+  private boolean cache;
   private boolean parseErrors;
   private boolean showParseTree;
   private boolean normalize;
@@ -101,19 +112,13 @@ public class WaxeyePEGParser
   public WaxeyePEGParser(URL grammar, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
-    try
-    {
-      readGrammar(grammar);
-    }
-    catch (IOException e)
-    {
-      logger.error("Grammar from URL ["+grammar+"] cannot be written to file: "+e.getMessage());
-      throw new RuntimeException(e);
-    }
-    catch (QueryException e)
-    {
-      logger.error("Grammar from URL ["+grammar+"] cannot be processed: "+e.getMessage());
-      throw new RuntimeException(e);
+    if (parser == null) {
+      try {
+        readGrammar(grammar);
+      } catch (IOException | QueryException e) {
+        logger.error("Grammar from URL ["+grammar+"] cannot be read, written or processed: "+e.getMessage());
+        throw new RuntimeException(e);
+      }
     }
   }
 
@@ -121,19 +126,13 @@ public class WaxeyePEGParser
   public WaxeyePEGParser(String grammar, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
-    try
-    {
-      readGrammar(grammar);
-    }
-    catch (IOException e)
-    {
-      logger.error("Grammar in string cannot be written to file: "+e.getMessage());
-      throw new RuntimeException(e);
-    }
-    catch (QueryException e)
-    {
-      logger.error("Grammar cannot be processed: "+e.getMessage());
-      throw new RuntimeException(e);
+    if (parser == null) {
+      try {
+        readGrammar(grammar);
+      } catch (IOException | QueryException e) {
+        logger.error("Grammar in string cannot be read, written or processed: "+e.getMessage());
+        throw new RuntimeException(e);
+      }
     }
   }
 
@@ -150,6 +149,7 @@ public class WaxeyePEGParser
     this.completeMatch = getOption(options, "complete-match", false);
     this.adjacentMatches = getOption(options, "adjacent-matches", false);
     this.matchWholeWords = getOption(options, "match-whole-words", false);
+    this.cache = getOption(options, "cache", false);
     this.parseErrors = getOption(options, "parse-errors", false);
     this.showParseTree = getOption(options, "show-parse-tree", false);
     this.normalize = getOption(options, "normalize", false);
@@ -166,10 +166,11 @@ public class WaxeyePEGParser
         try
         {
           workDir = Files.createTempDirectory("waxeye");
+          logger.info("WaxeyePEGParser: Created work directory for "+this.getClass().getName()+" : "+workDir);
         }
         catch (IOException e)
         {
-          logger.error("Work directory for "+this.getClass().getName()+" cannot be created: "+e.getMessage());
+          logger.error("WaxeyePEGParser: Work directory for "+this.getClass().getName()+" cannot be created: "+e.getMessage());
           throw new RuntimeException(e);
         }
       }
@@ -182,22 +183,24 @@ public class WaxeyePEGParser
   }
 
 
-  private void readGrammar(String grammar) throws IOException, QueryException
+  private synchronized void readGrammar(String grammar) throws IOException, QueryException
   {
+    // A string grammar is never cached, so write it to a file and compile.
     File grammarFile = workDir.resolve(this.internalName+".waxeye").toFile();
     try (
       PrintWriter grammarWriter = new PrintWriter(grammarFile.getAbsolutePath());
     ) {
       grammarWriter.print(grammar);
     }
-    readGrammar(grammarFile);
+    readCompileLoadGrammarFile(grammarFile);
   }
 
 
-  private void readGrammar(URL grammar) throws IOException, QueryException
+  private synchronized void readGrammar(URL grammar) throws IOException, QueryException
   {
     String grammarFilePath = grammar.toString();
     if (grammarFilePath.startsWith("file:/")) {
+      // A file: URL points to a local file.
       if (grammarFilePath.matches("^file:/+[A-Za-z]:/.*")) {
         // Windows: file:///C:/path => C:/path
         grammarFilePath = grammarFilePath.replaceAll("^file:/+", "");
@@ -205,8 +208,21 @@ public class WaxeyePEGParser
         // Unix: file:///path => /path
         grammarFilePath = grammarFilePath.replaceAll("^file:/+", "/");
       }
-      readGrammar(new File(grammarFilePath));
+      // Try to get the parser from the cache.
+      File grammarFile = new File(grammarFilePath);
+      ParserCacheEntry cached = parserCache.get(grammarFilePath);
+      if (cached != null && cached.modified > grammarFile.lastModified()) {
+        logger.info("WaxeyePEGParser: Parser for ["+grammarFilePath+"] retrieved from cache.");
+        this.parser = cached.parser;
+      } else {
+        readCompileLoadGrammarFile(grammarFile);
+        if (cache) {
+          parserCache.put(grammarFilePath, new ParserCacheEntry(this.parser));
+          logger.info("WaxeyePEGParser: Parser for ["+grammarFilePath+"] entered into cache.");
+        }
+      }
     } else {
+      // A non-file: URL will be read and copied into the workDir. It is not cached.
       File grammarFile = workDir.resolve(this.internalName+".waxeye").toFile();
       try (
         InputStream grammarStream = grammar.openStream();
@@ -214,15 +230,16 @@ public class WaxeyePEGParser
       ) {
         grammarStream.transferTo(grammarFileStream);
       }
-      readGrammar(grammarFile);
+      readCompileLoadGrammarFile(grammarFile);
     }
   }
 
 
-  private synchronized void readGrammar(File grammar) throws IOException, QueryException
+  private synchronized void readCompileLoadGrammarFile(File grammar) throws IOException, QueryException
   {
     String grammarFilePath = grammar.getAbsolutePath();
-    String javaDirName = grammarFilePath.replaceFirst("\\.[^./]*$", "").replaceAll("[^\\./_A-Za-z0-9]", "_");
+    // Make a Java directory name by removing the extension from the filename.
+    String javaDirName = grammar.getName().replaceFirst("\\.[^./]*$", "");
     File javaCodeDir = workDir.resolve(javaDirName).toFile();
     javaCodeDir.mkdirs();
     compileGrammar(grammarFilePath, javaCodeDir);
@@ -250,7 +267,7 @@ public class WaxeyePEGParser
     String[] waxeyeCommand =
         modular ? new String[]{waxeyePath, "-g", "java", javaCodeDirPath, "-m", grammarFilePath}
                 : new String[]{waxeyePath, "-g", "java", javaCodeDirPath,       grammarFilePath};
-    logger.info("Compiling waxeye grammar: "+String.join(" ", waxeyeCommand));
+    logger.info("WaxeyePEGParser: Compiling waxeye grammar; "+String.join(" ", waxeyeCommand));
     // String that collects output from the waxeye process.
     StringBuilder waxeyeOutput = new StringBuilder();
     BufferedReader waxeyeOutputReader = null;
@@ -276,7 +293,7 @@ public class WaxeyePEGParser
           waxeyeOutputReader.close();
         }
     }
-    logger.info(waxeyeOutput.toString());
+    logger.info("WaxeyePEGParser: "+waxeyeOutput.toString());
   }
 
 
