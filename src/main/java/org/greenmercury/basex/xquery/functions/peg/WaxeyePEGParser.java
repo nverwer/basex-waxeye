@@ -60,6 +60,9 @@ import org.waxeye.parser.Parser;
  *       <li>parse-errors Set to true to include errors in the output and not trigger an exception. (Default is false.)</li>
  *       <li>normalize Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)</li>
  *       <li>show-parse-tree Not yet implemented. Set to true to show the parse tree in an XML comment in the output. (Default is false.)</li>
+ *       <li>namespace-prefix The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
+ *       <li>namespace-uri The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace).
+ *           This option must be present if the 'namespace-prefix' option is defined.
  *     </ul>
  *   </li>
  * </ul>
@@ -105,6 +108,8 @@ public class WaxeyePEGParser
   private boolean parseErrors;
   private boolean showParseTree;
   private boolean normalize;
+  private String namespacePrefix;
+  private String namespaceUri;
 
   private Parser<?> parser;
 
@@ -153,6 +158,8 @@ public class WaxeyePEGParser
     this.parseErrors = getOption(options, "parse-errors", false);
     this.showParseTree = getOption(options, "show-parse-tree", false);
     this.normalize = getOption(options, "normalize", false);
+    this.namespacePrefix = getOption(options, "namespace-prefix", null);
+    this.namespaceUri = getOption(options, "namespace-uri", null);
     // Make a random internal name, used in the filename for a local copy of the grammar.
     Random random = new Random();
     this.internalName = "G" + random.ints(48, 123)
@@ -175,6 +182,11 @@ public class WaxeyePEGParser
         }
       }
     }
+  }
+
+
+  private String getOption(Map<String, String> options, String key, String defaultValue) {
+    return Optional.ofNullable(options.get(key)).orElse(defaultValue);
   }
 
 
@@ -432,7 +444,7 @@ public class WaxeyePEGParser
 
 
   /**
-   * The XmlVisitor processes the parse result, handling errors or insertin XML markup.
+   * The XmlVisitor processes the parse result, handling errors or inserting XML markup.
    */
   private class XmlVisitor implements IASTVisitor {
 
@@ -463,7 +475,11 @@ public class WaxeyePEGParser
     @Override
     public void visitAST(IAST<?> tree) {
       Position pos = tree.getPosition();
-      SmaxElement ntElement = new SmaxElement(tree.getType().toString());
+      String localName = tree.getType().toString();
+      SmaxElement ntElement =
+        ( namespaceUri == null )
+        ? new SmaxElement(localName)
+        : new SmaxElement(namespaceUri, (namespacePrefix == null ? localName : String.join(":", namespacePrefix, localName)));
       this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, pos.getStartIndex(), pos.getEndIndex(), true);
       for (IAST<?> child : tree.getChildren()) {
         child.acceptASTVisitor(this);

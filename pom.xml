@@ -5,7 +5,7 @@
 
   <groupId>org.greenmercury</groupId>
   <artifactId>basex-waxeye</artifactId>
-  <version>1.0.7</version>
+  <version>1.0.8</version>
   <name>Waxeye PEG parser generator for BaseX</name>
   <description>This provides an XQuery function that calls a modified version of the Waxeye PEG parser generator.</description>
 

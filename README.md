@@ -58,6 +58,10 @@ The `peg:waxey-peg-parser` function accepts the following options:
 * `match-whole-words` Set to true to only match whole words. (Default is false.)
 * `parse-errors` Set to true to include errors in the output and not trigger an exception. (Default is false.)
 * `normalize` Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)
+* `cache` Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.
+* `namespace-prefix` The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
+* `namespace-uri` The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace). This option must be present if the 'namespace-prefix' option is defined.
+
 
 If `complete-match` is true, `adjacent-matches` is ignored because there must be only one match.
 
