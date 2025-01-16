@@ -53,6 +53,8 @@ import org.waxeye.parser.Parser;
  *   <li>options A map with options. The following options are recognized:
  *     <ul>
  *       <li>modular Set to true if the grammar is modular [https://waxeye.org/manual#_modular_grammars]. (Default is false.)</li>
+ *       <li>parse-within-element If set to the local name (without namespace prefix) of an element, only text within elements with this name will be parsed.</li>
+ *       <li>parse-within-namespace If 'parse-within-element' is set, this may be set to the namespace URI of elements within which the parser will work.</li>
  *       <li>complete-match Set to true if the complete input text must be parsed as one matched fragment. (Default is false.)</li>
  *       <li>adjacent-matches Set to true if the complete input must be consumed as adjacent matched fragments. (Default is false.)</li>
  *       <li>match-whole-words Set to true to only match whole words. (Default is false.)</li>
@@ -101,6 +103,8 @@ public class WaxeyePEGParser
   private String internalName;
 
   private boolean modular;
+  private String parseWithinElement;
+  private String parseWithinNamespace;
   private boolean completeMatch;
   private boolean adjacentMatches;
   private boolean matchWholeWords;
@@ -151,6 +155,8 @@ public class WaxeyePEGParser
   {
     this.logger = logger;
     this.modular = getOption(options, "modular", false);
+    this.parseWithinElement = getOption(options, "parse-within-element", null);
+    this.parseWithinNamespace = getOption(options, "parse-within-namespace", null);
     this.completeMatch = getOption(options, "complete-match", false);
     this.adjacentMatches = getOption(options, "adjacent-matches", false);
     this.matchWholeWords = getOption(options, "match-whole-words", false);
@@ -361,7 +367,43 @@ public class WaxeyePEGParser
   {
     CharSequence textFragment = smaxDocument.getContent();
     parser.setEofCheck(completeMatch);
-    boolean allowUnmatchedText = !(completeMatch || adjacentMatches);
+    if (parseWithinElement != null) {
+      traverseAndScan(smaxDocument, textFragment, smaxDocument.getMarkup());
+    } else {
+      scanFragment(smaxDocument, textFragment, 0);
+    }
+  }
+
+  /**
+   * Traverse the DOM tree and only scan within the indicated elements.
+   * @param smaxDocument
+   * @param textFragment
+   * @param element
+   * @throws QueryException
+   */
+  private void traverseAndScan(SmaxDocument smaxDocument, CharSequence textFragment, SmaxElement element) throws QueryException
+  {
+    if (parseWithinElement.equals(element.getLocalName()) && (parseWithinNamespace == null || parseWithinNamespace.equals(element.getNamespaceURI()))) {
+      int textStart = element.getStartPos();
+      int textEnd = element.getEndPos();
+      scanFragment(smaxDocument, textFragment.subSequence(textStart, textEnd), textStart);
+    } else if (element.hasChildNodes()) {
+      for (SmaxElement child : element.getChildren()) {
+        traverseAndScan(smaxDocument, textFragment, child);
+      }
+    }
+  }
+
+  /**
+   * Scan a SMAX document or a fragment of it.
+   * @param smaxDocument
+   * @param textFragment the text of the fragment to scan
+   * @param textStart the start position of the fragment within the document
+   * @throws QueryException
+   */
+  private void scanFragment(SmaxDocument smaxDocument, CharSequence textFragment, int textStart) throws QueryException
+  {
+    // Make an InputBuffer for the textFragment.
     final InputBuffer input;
     if (normalize) {
       // The character positions in fragment and input must be the same.
@@ -369,8 +411,10 @@ public class WaxeyePEGParser
     } else {
       input = new InputBuffer(StringUtils.charSequenceToCharArray(textFragment));
     }
+    // Scan the text fragment.
     int textPosition = 0;
     int textEnd = textFragment.length();
+    boolean allowUnmatchedText = !(completeMatch || adjacentMatches);
     StringBuilder unmatched = new StringBuilder(); // Collects unmatched characters, up to the next match.
     while (textPosition < textEnd) {
       // Skip spaces if unmatched text is allowed and only whole words are matched.
@@ -389,7 +433,7 @@ public class WaxeyePEGParser
         if (!allowUnmatchedText && parseResult.getError() != null) {
           // There was a parse error.
           if (parseErrors) {
-            new XmlVisitor(parseResult, textFragment, textPosition, smaxDocument);
+            new XmlVisitor(parseResult, textFragment, textStart, smaxDocument);
           } else {
             String message = "Parser error: "+parseResult.getError().toString()+"\n"+
                 "Parsing ["+textFragment.subSequence(textPosition, Math.min(textFragment.length(), textPosition+12))+"]";
@@ -407,7 +451,7 @@ public class WaxeyePEGParser
               String parseTree = parseResult.toString();
               insertComment("Parsing took " + milliSeconds + " ms.\n" + parseTree);
             }
-            new XmlVisitor(parseResult, textFragment, textPosition, smaxDocument);
+            new XmlVisitor(parseResult, textFragment, textStart, smaxDocument);
             textPosition = nextPosition;
           } else if (allowUnmatchedText) {
             // Skip one character if there is an ignored error or empty match.
@@ -449,27 +493,29 @@ public class WaxeyePEGParser
   private class XmlVisitor implements IASTVisitor {
 
     private final SmaxDocument smaxDocument;
+    private int startPosition;
 
-    public XmlVisitor(ParseResult<?> parseResult, CharSequence fragment, int position, SmaxDocument smaxDocument) throws QueryException
+    public XmlVisitor(ParseResult<?> parseResult, CharSequence fragment, int startPosition, SmaxDocument smaxDocument) throws QueryException
     {
       this.smaxDocument = smaxDocument;
+      this.startPosition = startPosition;
       if (parseResult.getAST() != null) {
         parseResult.getAST().acceptASTVisitor(this);
       } else if (parseResult.getError() != null) {
-        error(parseResult.getError(), position);
+        error(parseResult.getError(), startPosition);
       } else {
         throw new QueryException("Unknown error occurred during parsing. There is no parse result and no error.");
       }
     }
 
-    public void error(ParseError error, int position) {
+    public void error(ParseError error, int startPosition) {
       SmaxElement errorElement = new SmaxElement(FN_NS_URI, "error");
       errorElement.setAttribute("NT", error.getNT());
       errorElement.setAttribute("line", ""+error.getLine());
       errorElement.setAttribute("column", ""+error.getColumn());
       errorElement.setAttribute("position", ""+error.getPosition());
       errorElement.setAttribute("message", error.toString());
-      this.smaxDocument.insertMarkup(errorElement, Balancing.START, position, position);
+      this.smaxDocument.insertMarkup(errorElement, Balancing.START, startPosition, startPosition);
     }
 
     @Override
@@ -480,7 +526,7 @@ public class WaxeyePEGParser
         ( namespaceUri == null )
         ? new SmaxElement(localName)
         : new SmaxElement(namespaceUri, (namespacePrefix == null ? localName : String.join(":", namespacePrefix, localName)));
-      this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, pos.getStartIndex(), pos.getEndIndex(), true);
+      this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), true);
       for (IAST<?> child : tree.getChildren()) {
         child.acceptASTVisitor(this);
         }
