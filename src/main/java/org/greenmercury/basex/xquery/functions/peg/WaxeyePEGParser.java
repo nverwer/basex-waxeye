@@ -116,32 +116,31 @@ public class WaxeyePEGParser
   private String namespaceUri;
 
   private Parser<?> parser;
+  private String grammarURL;
 
 
-  public WaxeyePEGParser(URL grammar, Map<String, String> options, Logger logger)
+  public WaxeyePEGParser(URL grammarURL, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
-    if (parser == null) {
-      try {
-        readGrammar(grammar);
-      } catch (IOException | QueryException e) {
-        logger.error("Grammar from URL ["+grammar+"] cannot be read, written or processed: "+e.getMessage());
-        throw new RuntimeException(e);
-      }
+    this.grammarURL = grammarURL.toString();
+    try {
+      readGrammar(grammarURL);
+    } catch (IOException | QueryException e) {
+      logger.error("Grammar from URL ["+grammarURL+"] cannot be read, written or processed: "+e.getMessage());
+      throw new RuntimeException(e);
     }
   }
 
 
-  public WaxeyePEGParser(String grammar, Map<String, String> options, Logger logger)
+  public WaxeyePEGParser(String grammarURL, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
-    if (parser == null) {
-      try {
-        readGrammar(grammar);
-      } catch (IOException | QueryException e) {
-        logger.error("Grammar in string cannot be read, written or processed: "+e.getMessage());
-        throw new RuntimeException(e);
-      }
+    this.grammarURL = grammarURL;
+    try {
+      readGrammar(grammarURL);
+    } catch (IOException | QueryException e) {
+      logger.error("Grammar in string cannot be read, written or processed: "+e.getMessage());
+      throw new RuntimeException(e);
     }
   }
 
@@ -365,13 +364,17 @@ public class WaxeyePEGParser
    */
   public void scan(SmaxDocument smaxDocument) throws QueryException
   {
+    long startTime = System.currentTimeMillis();
     CharSequence textFragment = smaxDocument.getContent();
     parser.setEofCheck(completeMatch);
+    long nrScans;
     if (parseWithinElement != null) {
-      traverseAndScan(smaxDocument, textFragment, smaxDocument.getMarkup());
+      nrScans = traverseAndScan(smaxDocument, textFragment, smaxDocument.getMarkup());
     } else {
-      scanFragment(smaxDocument, textFragment, 0);
+      nrScans = scanFragment(smaxDocument, textFragment, 0);
     }
+    long elapsedTime = System.currentTimeMillis()-startTime;
+    logger.info("WaxeyePEGParser: Parsing with "+grammarURL+" took "+elapsedTime+" ms, for "+nrScans+" scans.");
   }
 
   /**
@@ -379,19 +382,22 @@ public class WaxeyePEGParser
    * @param smaxDocument
    * @param textFragment
    * @param element
+   * @return the number of scans (parsing attempts)
    * @throws QueryException
    */
-  private void traverseAndScan(SmaxDocument smaxDocument, CharSequence textFragment, SmaxElement element) throws QueryException
+  private long traverseAndScan(SmaxDocument smaxDocument, CharSequence textFragment, SmaxElement element) throws QueryException
   {
+    long nrScans = 0L;
     if (parseWithinElement.equals(element.getLocalName()) && (parseWithinNamespace == null || parseWithinNamespace.equals(element.getNamespaceURI()))) {
       int textStart = element.getStartPos();
       int textEnd = element.getEndPos();
-      scanFragment(smaxDocument, textFragment.subSequence(textStart, textEnd), textStart);
+      nrScans = scanFragment(smaxDocument, textFragment.subSequence(textStart, textEnd), textStart);
     } else if (element.hasChildNodes()) {
       for (SmaxElement child : element.getChildren()) {
-        traverseAndScan(smaxDocument, textFragment, child);
+        nrScans += traverseAndScan(smaxDocument, textFragment, child);
       }
     }
+    return nrScans;
   }
 
   /**
@@ -399,10 +405,12 @@ public class WaxeyePEGParser
    * @param smaxDocument
    * @param textFragment the text of the fragment to scan
    * @param textStart the start position of the fragment within the document
+   * @return the number of scans (parsing attempts)
    * @throws QueryException
    */
-  private void scanFragment(SmaxDocument smaxDocument, CharSequence textFragment, int textStart) throws QueryException
+  private long scanFragment(SmaxDocument smaxDocument, CharSequence textFragment, int textStart) throws QueryException
   {
+    long nrScans = 0L;
     // Make an InputBuffer for the textFragment.
     final InputBuffer input;
     if (normalize) {
@@ -428,6 +436,7 @@ public class WaxeyePEGParser
         input.setPosition(textPosition);
         long startTime = new Date().getTime();
         // This is where the parser does its work.
+        ++nrScans;
         final ParseResult<?> parseResult = parser.parse(input);
         // Parse errors are significant if completeMatch or adjacentMatches.
         if (!allowUnmatchedText && parseResult.getError() != null) {
@@ -472,6 +481,7 @@ public class WaxeyePEGParser
       }
     }
     handleText(unmatched);
+    return nrScans;
   }
 
 
