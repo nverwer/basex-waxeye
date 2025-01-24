@@ -388,7 +388,11 @@ public class WaxeyePEGParser
   private long traverseAndScan(SmaxDocument smaxDocument, CharSequence textFragment, SmaxElement element) throws QueryException
   {
     long nrScans = 0L;
-    if (parseWithinElement.equals(element.getLocalName()) && (parseWithinNamespace == null || parseWithinNamespace.equals(element.getNamespaceURI()))) {
+    String elementNsURI = element.getNamespaceURI();
+    if ( parseWithinElement.equals(element.getLocalName()) &&
+         ( (parseWithinNamespace == null || parseWithinNamespace.isEmpty()) && (elementNsURI == null || elementNsURI.isEmpty()) ||
+             parseWithinNamespace.equals(element.getNamespaceURI())
+         )) {
       int textStart = element.getStartPos();
       int textEnd = element.getEndPos();
       nrScans = scanFragment(smaxDocument, textFragment.subSequence(textStart, textEnd), textStart);
