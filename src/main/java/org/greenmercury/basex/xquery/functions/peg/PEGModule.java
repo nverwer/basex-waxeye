@@ -76,7 +76,7 @@ public class PEGModule extends QueryModule
   @Requires(Permission.NONE)
   @Deterministic
   @ContextDependent
-  public FuncItem waxeyPegParser(Object grammar, Map<String, String> options) throws QueryException {
+  public FuncItem waxeyePegParser(Object grammar, Map<String, String> options) throws QueryException {
     // Names and types of the arguments of the generated function.
     final Var[] generatedFunctionParameters = { new VarScope().addNew(new QNm("input"), SeqType.ITEM_O, queryContext, null) };
     final Expr[] generatedFunctionParameterExprs = { new VarRef(null, generatedFunctionParameters[0]) };

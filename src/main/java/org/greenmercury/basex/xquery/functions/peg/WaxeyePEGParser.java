@@ -391,7 +391,7 @@ public class WaxeyePEGParser
     String elementNsURI = element.getNamespaceURI();
     if ( parseWithinElement.equals(element.getLocalName()) &&
          ( (parseWithinNamespace == null || parseWithinNamespace.isEmpty()) && (elementNsURI == null || elementNsURI.isEmpty()) ||
-             parseWithinNamespace.equals(element.getNamespaceURI())
+           parseWithinNamespace.equals(elementNsURI)
          )) {
       int textStart = element.getStartPos();
       int textEnd = element.getEndPos();
