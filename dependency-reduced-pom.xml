@@ -113,7 +113,7 @@
     <maven.compiler.target>11</maven.compiler.target>
     <smax.groupId>org.greenmercury</smax.groupId>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <smax.version>1.0.8</smax.version>
+    <smax.version>1.0.9</smax.version>
     <basex.version>11.5</basex.version>
   </properties>
 </project>

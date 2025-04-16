@@ -128,7 +128,7 @@ public class PEGModule extends QueryModule
     }
 
     /**
-     * Evaluate the generated NER function.
+     * Evaluate the generated PEG parser function.
      */
     @Override
     public Value value(final QueryContext qc)
