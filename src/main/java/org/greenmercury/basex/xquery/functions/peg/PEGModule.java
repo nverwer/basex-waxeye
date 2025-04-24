@@ -159,7 +159,7 @@ public class PEGModule extends QueryModule
       // Convert the SMAX document to something that BaseX can use.
       Document outputDocument;
       try {
-        outputDocument = Dom.documentFromSmax(smaxDocument);
+        outputDocument = Dom.documentFromSmax(smaxDocument, true);
       } catch (Exception e) {
         throw new QueryException(e);
       }
