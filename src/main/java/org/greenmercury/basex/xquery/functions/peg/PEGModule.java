@@ -4,7 +4,6 @@ import java.net.URI;
 import java.net.URL;
 import java.util.Map;
 
-import org.basex.io.IO;
 import org.basex.query.CompileContext;
 import org.basex.query.QueryContext;
 import org.basex.query.QueryException;
@@ -15,31 +14,23 @@ import org.basex.query.expr.Expr;
 import org.basex.query.func.java.JavaCall;
 import org.basex.query.util.list.AnnList;
 import org.basex.query.value.Value;
-import org.basex.query.value.ValueBuilder;
 import org.basex.query.value.item.FuncItem;
 import org.basex.query.value.item.QNm;
 import org.basex.query.value.item.Str;
 import org.basex.query.value.node.ANode;
-import org.basex.query.value.node.DBNode;
-import org.basex.query.value.node.FElem;
-import org.basex.query.value.node.FNode;
 import org.basex.query.value.type.FuncType;
 import org.basex.query.value.type.SeqType;
 import org.basex.query.var.Var;
 import org.basex.query.var.VarRef;
 import org.basex.query.var.VarScope;
 import org.basex.util.hash.IntObjMap;
-import org.basex.util.hash.TokenMap;
 import org.basex.util.log.Log;
 import org.greenmercury.smax.SmaxDocument;
 import org.greenmercury.smax.SmaxElement;
 import org.greenmercury.smax.SmaxException;
-import org.greenmercury.smax.convert.DomElement;
-import org.greenmercury.smax.convert.XmlString;
-import org.w3c.dom.DOMException;
+import org.greenmercury.smax.convert.Dom;
+import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 public class PEGModule extends QueryModule
 {
@@ -135,40 +126,55 @@ public class PEGModule extends QueryModule
     throws QueryException
     {
       Value inputValue = arg(0).value(qc);
-      // Create a SMAX document with a <wrapper> root element around the input.
+      boolean inputIsString = inputValue.seqType().instanceOf(SeqType.STRING_O);
+      boolean inputIsElement = inputValue.seqType().instanceOf(SeqType.ELEMENT_O);
+      // Create a SMAX document from the input.
       SmaxDocument smaxDocument = null;
-      if (inputValue.seqType().instanceOf(SeqType.STRING_O)) {
+      if (inputIsString) {
+        // Create a SMAX document with a <wrapper> root element around the input string.
         final String inputString = ((Str)inputValue).toJava();
         final SmaxElement wrapper = new SmaxElement("wrapper").setStartPos(0).setEndPos(inputString.length());
         smaxDocument = new SmaxDocument(wrapper, inputString);
-      } else if (inputValue.seqType().instanceOf(SeqType.NODE_O)) {
-        FElem fWrapper = (FElem) FElem.build(new QNm("wrapper")).add((ANode)inputValue).finish();
-        Element inputElement = (Element) fWrapper.toJava();
+      } else if (inputIsElement) {
+        // Create a SMAX document from this element.
         try {
-          smaxDocument = DomElement.toSmax(inputElement);
+          smaxDocument = Dom.toSmax((Element)inputValue.toJava());
+        } catch (SmaxException e) {
+          throw new QueryException(e);
+        }
+      } else if (inputValue.seqType().instanceOf(SeqType.DOCUMENT_NODE_O)) {
+        // Create a SMAX document from this document.
+        try {
+          smaxDocument = Dom.toSmax((Document)inputValue.toJava());
         } catch (SmaxException e) {
           throw new QueryException(e);
         }
       } else {
-        throw new QueryException("The generated function accepts a string or node, but not a "+inputValue.seqType().typeString());
+        throw new QueryException("The generated function accepts a string or document-node or element, but not a "+inputValue.seqType().typeString());
       }
+
       // Parse the SMAX document's text content and insert new markup.
       this.parser.scan(smaxDocument);
+
       // Convert the SMAX document to something that BaseX can use.
-      Element outputElement;
+      Document outputDocument;
       try {
-        outputElement = DomElement.fromSmax(smaxDocument);
+        outputDocument = Dom.documentFromSmax(smaxDocument);
       } catch (Exception e) {
         throw new QueryException(e);
       }
-      // Convert the child node NodeList to an array, and use JavaCall.toValue to make a Value of the array.
-      NodeList wrapperChildren = outputElement.getChildNodes();
-      Node[] result = new Node[wrapperChildren.getLength()];
-      for (int i = 0; i < wrapperChildren.getLength(); ++i) {
-        result[i] = wrapperChildren.item(i);
+      ANode bxOutputDocument = (ANode)JavaCall.toValue(outputDocument, qc, null);
+      if (inputIsString) {
+        // Get the wrapper element and return its children.
+        ANode wrapper = bxOutputDocument.childIter().next();
+        return wrapper.childIter().value(qc, null);
+      } else if (inputIsElement) {
+        // Return the root element of the output document.
+        return bxOutputDocument.childIter().next();
+      } else {
+        // Return the output document.
+        return bxOutputDocument;
       }
-      Value bxResult = JavaCall.toValue(result, qc, null);
-      return bxResult;
     }
 
     @Override
@@ -181,7 +187,7 @@ public class PEGModule extends QueryModule
     @Override
     public void toString(QueryString qs)
     {
-      qs.token("generated-PEG-parser").params(exprs);
+      qs.token("generated-"+this.getClass().getName()).params(exprs);
     }
 
   }

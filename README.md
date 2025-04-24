@@ -16,15 +16,17 @@ then restart BaseX.
 # Using
 
 The Java code follows the integration pattern described in the [BaseX documentation](https://docs.basex.org/main/Java_Bindings#integration).
-The Java function `FuncItem waxeyPegParser(Object, Map<String, String>)`
-is available in XQuery as 
+The Java function `FuncItem waxeyePegParser(Object grammar, Map<String, String> options)` is available in XQuery as 
 
 ```xquery
 peg:waxeye-peg-parser($grammar as (xs:string | xs:anyURI), $options as map(xs:string, xs:string))
-  as function((xs:string | node())) as node()*
+  as function((xs:string | element() | document-node())) as node()*
 ```
 
 where the `peg` namespace is `org.greenmercury.basex.xquery.functions.peg.PEGModule`.
+If the input to the parser `function((xs:string | element() | document-node())) as node()*` is a string,
+the output is a sequence of text nodes and elements.
+If the input is an element or a document node, the output has the same type.
 
 The following is an example of using the waxeye-peg-parser function in XQuery:
 
