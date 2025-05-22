@@ -453,7 +453,7 @@ public class WaxeyePEGParser
             throw new QueryException(message);
           }
         } else {
-          boolean hasNonEmptyParseTree = parseResult.getAST() != null && parseResult.getAST().getChildren().size() > 0;
+          boolean hasNonEmptyParseTree = parseResult.getAST() != null && !( parseResult.getAST().getType().toString().equals("_Empty") ) ;
           int nextPosition = hasNonEmptyParseTree ? parseResult.getAST().getPosition().getEndIndex() : textEnd;
           boolean nextCharacterInWord = nextPosition < textEnd && Character.isLetterOrDigit(textFragment.charAt(nextPosition));
           if (hasNonEmptyParseTree && (!matchWholeWords || !nextCharacterInWord)) {
