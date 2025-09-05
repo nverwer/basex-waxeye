@@ -36,6 +36,7 @@
 			<attribute name="maven.pomderived" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="lib/waxeye.jar" sourcepath="/waxeye/src/java"/>
+	<classpathentry kind="lib" path="lib/waxeye.jar" sourcepath="/waxeye"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/waxeye"/>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>

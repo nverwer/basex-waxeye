@@ -20,7 +20,7 @@
 
     <smax.groupId>org.greenmercury</smax.groupId>
     <smax.artifactId>SMAX</smax.artifactId>
-    <smax.version>1.1.1</smax.version>
+    <smax.version>1.2.1</smax.version>
   </properties>
 
   <dependencyManagement>

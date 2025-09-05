@@ -17,10 +17,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.function.BiFunction;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -36,8 +38,9 @@ import org.waxeye.ast.IAST;
 import org.waxeye.ast.IASTVisitor;
 import org.waxeye.ast.IChar;
 import org.waxeye.ast.IEmpty;
+import org.waxeye.ast.IPreParsedNonTerminal;
 import org.waxeye.ast.Position;
-import org.waxeye.input.InputBuffer;
+import org.waxeye.input.IParserInput;
 import org.waxeye.parser.ParseError;
 import org.waxeye.parser.ParseResult;
 import org.waxeye.parser.Parser;
@@ -85,7 +88,7 @@ public class WaxeyePEGParser
   // Work directory for all waxeye parsers.
   private static Path workDir;
 
-  // Path to the Waxeye executable. Waxeye should be installed on the host system.
+  // Path to the Waxeye executable. Waxeye MUST be installed on the host system.
   private static String waxeyePath = "waxeye";
 
   // Cache for parsers, to prevent repeated grammar compilation.
@@ -107,6 +110,7 @@ public class WaxeyePEGParser
   private String parseWithinNamespace;
   private boolean completeMatch;
   private boolean adjacentMatches;
+  private boolean allowUnmatchedText;
   private boolean matchWholeWords;
   private boolean cache;
   private boolean parseErrors;
@@ -158,6 +162,7 @@ public class WaxeyePEGParser
     this.parseWithinNamespace = getOption(options, "parse-within-namespace", null);
     this.completeMatch = getOption(options, "complete-match", false);
     this.adjacentMatches = getOption(options, "adjacent-matches", false);
+    this.allowUnmatchedText = !(completeMatch || adjacentMatches);
     this.matchWholeWords = getOption(options, "match-whole-words", false);
     this.cache = getOption(options, "cache", false);
     this.parseErrors = getOption(options, "parse-errors", false);
@@ -300,7 +305,7 @@ public class WaxeyePEGParser
         throw new QueryException("Waxeye process exited with error code: "+waxeyeProcess.exitValue());
       }
     } catch (Throwable ex) {
-      logger.error("Error compiling waxeye grammar ["+grammarFilePath+"]:\n"+waxeyeOutput.toString());
+      logger.error("Error compiling waxeye grammar ["+grammarFilePath+"]:\n"+ex.getMessage()+"\n"+waxeyeOutput.toString());
       throw new QueryException("Error compiling waxeye grammar ["+grammarFilePath+"]: "+ex.getMessage()+". See the log file for details.");
     } finally {
         if (waxeyeProcess != null) {
@@ -415,34 +420,39 @@ public class WaxeyePEGParser
   private long scanFragment(SmaxDocument smaxDocument, CharSequence textFragment, int textStart) throws QueryException
   {
     long nrScans = 0L;
-    // Make an InputBuffer for the textFragment.
-    final InputBuffer input;
+    // Make an ParserSmaxInput for the textFragment.
+    final ParserSmaxInput input;
     if (normalize) {
       // The character positions in fragment and input must be the same.
-      input = new InputBuffer(StringUtils.charSequenceToCharArray(StringUtils.normalizeOneToOne(textFragment)));
+      input = new ParserSmaxInput(StringUtils.charSequenceToCharArray(StringUtils.normalizeOneToOne(textFragment)));
     } else {
-      input = new InputBuffer(StringUtils.charSequenceToCharArray(textFragment));
+      input = new ParserSmaxInput(StringUtils.charSequenceToCharArray(textFragment));
     }
     // Scan the text fragment.
     int textPosition = 0;
     int textEnd = textFragment.length();
-    boolean allowUnmatchedText = !(completeMatch || adjacentMatches);
+    int previousTextPosition = -1;
     StringBuilder unmatched = new StringBuilder(); // Collects unmatched characters, up to the next match.
-    while (textPosition < textEnd) {
+    // A function that checks if a pre-parsed non-terminal is present at the current position in the input.
+    final BiFunction<String, IParserInput<SmaxElement>,Integer> preparsedNonTerminalAt =
+        (String nonTerminalName, IParserInput<SmaxElement> smaxInput) -> this.preparsedNonTerminalAt(smaxDocument, nonTerminalName, (ParserSmaxInput)smaxInput);
+    // Allow textPosition to go up to textEnd, to allow zero-length matches at the end of the input.
+    // Stop if textPosition does not advance, to prevent infinite loops.
+    while (textPosition <= textEnd && textPosition > previousTextPosition) {
       // Skip spaces if unmatched text is allowed and only whole words are matched.
       if (allowUnmatchedText && matchWholeWords) {
         while (textPosition < textEnd && Character.isWhitespace(textFragment.charAt(textPosition))) {
           unmatched.append(textFragment.charAt(textPosition++));
         }
       }
-      if (textPosition < textEnd) {
+      if (textPosition <= textEnd) {
         // Match the input from textPosition.
         input.setPosition(textPosition);
         long startTime = new Date().getTime();
         // This is where the parser does its work.
         ++nrScans;
-        final ParseResult<?> parseResult = parser.parse(input);
-        // Parse errors are significant if completeMatch or adjacentMatches.
+        final ParseResult<?> parseResult = parser.parse(input, preparsedNonTerminalAt);
+        // Parse errors are significant if completeMatch or adjacentMatches (!allowUnmatchedText).
         if (!allowUnmatchedText && parseResult.getError() != null) {
           // There was a parse error.
           if (parseErrors) {
@@ -466,8 +476,8 @@ public class WaxeyePEGParser
             }
             new XmlVisitor(parseResult, textFragment, textStart, smaxDocument);
             textPosition = nextPosition;
-          } else if (allowUnmatchedText) {
-            // Skip one character if there is an ignored error or empty match.
+          } else if (allowUnmatchedText && textPosition < textEnd) {
+            // Skip one character if there is an ignored error or empty match, and more text is available.
             char unmatchedChar = textFragment.charAt(textPosition++);
             unmatched.append(unmatchedChar);
             // If only whole words are matched, and the current character was part of a word, skip the rest of the word.
@@ -483,6 +493,7 @@ public class WaxeyePEGParser
           }
         }
       }
+      previousTextPosition = textPosition;
     }
     handleText(unmatched);
     return nrScans;
@@ -497,7 +508,48 @@ public class WaxeyePEGParser
 
 
   private void insertComment(String comment) {
-    // Implementation requires SMAX support.
+    // Implementation requires SMAX support for comments.
+  }
+
+
+  /**
+   * Check if a pre-parsed non-terminal is present at the given position in the document.
+   * @param smaxDocument the document that is being parsed / scanned.
+   * @param nonTerminalName the name of a pre-parsed non-terminal, as specified by the grammar.
+   * @param input the current input, with its position and extended data.
+   * @return the number of character positions within the pre-parsed non-terminal, or -1 if there is no pre-parsed non-terminal with the given name at the given position.
+   */
+  private int preparsedNonTerminalAt(SmaxDocument smaxDocument, String nonTerminalName, ParserSmaxInput input)
+  {
+    int startPos = input.getPosition();
+    // The last visited element. One of the elements following it can be the pre-parsed non-terminal.
+    SmaxElement element = input.getExtendedData();
+    System.out.println("\n--- Looking for pre-parsed non-terminal <"+nonTerminalName+"> at position "+startPos+" with extended data: "+(element == null ? "new" : element.toString()));
+    // The next element may contain the pre-parsed non-terminal.
+    if (element == null) {
+      element = smaxDocument.getMarkup(); // Start at the root element
+    } else {
+      element = input.getNextElement(element);
+    }
+    System.out.println("--- Start searching from element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
+    // Find the first element at the required start position.
+    while (element != input.endElement && element.getStartPos() < startPos) {
+      System.out.println("--- Skipping element: "+element.toString());
+      element = input.getNextElement(element);
+      System.out.println("--- After skipping element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
+    }
+    // Search for the pre-parsed non-terminal at the required start position.
+    while (element != input.endElement && element.getStartPos() == startPos) {
+      System.out.println("--- Checking element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
+      if (nonTerminalName.equals(element.getLocalName())) {
+        System.out.println("--- Found pre-parsed non-terminal: "+element.toString());
+        input.setExtendedData(element); // This is now the last visited element.
+        return element.getEndPos() - element.getStartPos();
+      }
+      element = input.getNextElement(element);
+    }
+    System.out.println("--- No pre-parsed non-terminal found for "+nonTerminalName+" at position "+startPos);
+    return -1;
   }
 
 
@@ -508,6 +560,8 @@ public class WaxeyePEGParser
 
     private final SmaxDocument smaxDocument;
     private int startPosition;
+    /* The set of parent elements, used to determine where to insert new elements. */
+    private HashSet<SmaxElement> parentElements = new HashSet<>();
 
     public XmlVisitor(ParseResult<?> parseResult, CharSequence fragment, int startPosition, SmaxDocument smaxDocument) throws QueryException
     {
@@ -532,18 +586,26 @@ public class WaxeyePEGParser
       this.smaxDocument.insertMarkup(errorElement, Balancing.START, startPosition, startPosition);
     }
 
+    /**
+     * Visit a node in the parse tree.
+     * @param node the node that is being visited.
+     */
     @Override
-    public void visitAST(IAST<?> tree) {
-      Position pos = tree.getPosition();
-      String localName = tree.getType().toString();
+    public void visitAST(IAST<?> node) {
+      Position pos = node.getPosition();
+      String localName = node.getType().toString();
       SmaxElement ntElement =
         ( namespaceUri == null )
         ? new SmaxElement(localName)
         : new SmaxElement(namespaceUri, (namespacePrefix == null ? localName : String.join(":", namespacePrefix, localName)));
-      this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), true);
-      for (IAST<?> child : tree.getChildren()) {
+      // Insert the new element. When inserting in one of the elements in parentElements, use INNER balancing instead of OUTER.
+      ntElement = this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), parentElements);
+      parentElements.add(ntElement);
+      for (IAST<?> child : node.getChildren()) {
         child.acceptASTVisitor(this);
-        }
+      }
+      // Here we know the actual content of the non-terminal element, which may contain empty pre-parsed non-terminals.
+      parentElements.remove(ntElement);
     }
 
     @Override
@@ -552,6 +614,11 @@ public class WaxeyePEGParser
 
     @Override
     public void visitChar(IChar tree) {
+    }
+
+    @Override
+    public void visitPreParsedNonTerminal(IPreParsedNonTerminal tree) {
+      System.out.println("### XmlVisitor: PreParsedNonTerminal "+tree.getName());
     }
 
   }

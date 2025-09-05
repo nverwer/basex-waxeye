@@ -114,7 +114,7 @@ This will generate a `waxeye.exe` in the waxeye root directory, and a `waxeye.ja
 In Linux / MacOS, go to the waxeye root directory (where you cloned waxeye) and execute `make compiler runtime-java`.
 This will generate a `waxeye` executable in the `bin` directory, and a `waxeye.jar` (plus some libraries) in the `lib` directory.
 
+__Please note:__ The waxeye binary must be made available from the command line by appending the `waxeye` (Windows) or `waxeye/bin` (Linux) directory to the PATH environment variable.
+
 The most recent version of the jar file is already present in `basex-waxeye`, and you can ignore it.
 However, if you have changed something in waxeye, copy the jar file from `waxeye/lib/waxeye.jar` into `basex-waxeye/lib/waxeye.jar`, and install `basex-waxeye` again.
-
-The waxeye binary must be made available from the command line by appending the `waxeye/bin` directory to tha PATH environment variable.
