@@ -38,7 +38,7 @@ public class WaxeyePEGParserTest
     return XmlString.fromSmax(document).replaceAll("<\\?.*?\\?>", "").replaceAll("\\s*xmlns:.+?=\".*?\"", "");
   }
 
-  
+
   private final String calculatorGrammar =
     "sum   <- prod *(ws [+-] ws prod)\n" +
     "prod  <- unary *(ws [*/] ws unary)\n" +
@@ -51,7 +51,7 @@ public class WaxeyePEGParserTest
   private final String abcPalindromeGrammar =
     "palindrome <- 'a' :?palindrome 'a' | 'b' ?:palindrome 'b' | 'c' ?:palindrome 'c' | 'a' | 'b' | 'c' \n";
 
-  
+
   @Test
   void test_Grammar_1() throws Exception
   {
@@ -85,7 +85,7 @@ public class WaxeyePEGParserTest
     SmaxDocument document = XmlString.toSmax("<c><int>1</int><plus>+</plus><int>1</int></c>");
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<c><Sum><int><Prod><Num>1</Num></Prod></int><plus>+</plus><int><Prod><Num>1</Num></Prod></int></Sum></c>";
+    String expectedOutput = "<c><Sum><Prod><Num><int>1</int></Num></Prod><plus>+</plus><Prod><Num><int>1</int></Num></Prod></Sum></c>";
     assertEquals(expectedOutput, output);
   }
 

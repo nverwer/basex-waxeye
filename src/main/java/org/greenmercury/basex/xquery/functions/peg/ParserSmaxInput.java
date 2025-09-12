@@ -14,28 +14,32 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
   /** The internal buffer. */
   private final char[] input;
 
+  /** The size of the buffer. */
+  private final int inputSize;
+
   /** The current position in the buffer. */
   private int position;
 
   /** The extended data associated with the input is the last visited element.
-   * It is {@code null} when no element has been visited yet, and {@code SmaxElement} when there are no more elements to visit.
+   * It is {@code null} when no element has been visited yet, and {@code endElement} when there are no more elements to visit.
    */
   private SmaxElement extendedData;
-
-  /** The size of the buffer. */
-  private final int inputSize;
 
   /** A SmaxElement that indicates that there is no next element. It has itself as its next element.
    */
   public final SmaxElement endElement = new SmaxElement("END_ELEMENT") {
-      @Override
-      public SmaxElement getNextElement() {
-          return this; // Points to itself.
-      }
-      @Override
-      public String toString() {
-          return "END_ELEMENT";
-      }
+    @Override
+    public SmaxElement getNextElement() {
+      return this; // Points to itself.
+    }
+    @Override
+    public SmaxElement getNextSiblingElement() {
+      return this; // Points to itself.
+    }
+    @Override
+    public String toString() {
+      return "END_ELEMENT";
+    }
   };
 
   /**
@@ -45,12 +49,12 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
    */
   public ParserSmaxInput(final char[] input)
   {
-      System.out.println("-- Creating new ParserSmaxInput");
-      this.input = input;
-      this.position = 0;
-      this.inputSize = input.length;
-      this.extendedData = null;
-      assert invariants();
+    System.out.println("-- Creating new ParserSmaxInput");
+    this.input = input;
+    this.position = 0;
+    this.inputSize = input.length;
+    this.extendedData = null;
+    assert invariants();
   }
 
   /**
@@ -60,9 +64,9 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
    */
   private boolean invariants()
   {
-      assert input != null;
-      assert position >= 0 && position <= inputSize;
-      return true;
+    assert input != null;
+    assert position >= 0 && position <= inputSize;
+    return true;
   }
 
   /** {@inheritDoc} */
@@ -182,6 +186,11 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
       this.extendedData = extendedData;
   }
 
+  /** Returns the next SmaxElement after the given element, or endElement if there is no next element.
+   * If the given element is null, returns null.
+   * @param element The current SmaxElement.
+   * @return The next SmaxElement, or endElement if there is no next element, or null if the given element is null.
+   */
   public SmaxElement getNextElement(SmaxElement element) {
     if (element == null) {
         return null;
@@ -189,6 +198,26 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
     SmaxElement nextElement = element.getNextElement();
     if (nextElement == null) {
         return endElement;
+    }
+    return nextElement;
+  }
+
+  /**
+   * Get the next element in document order, which is either a child or a sibling of the given element,
+   * but not a sibling of an ancestor of the given element.
+   * @param element
+   * @return the next element in document order, or endElement if there is no next element.
+   */
+  public SmaxElement getNextChildOrSiblingElement(SmaxElement element) {
+    if (element == null) {
+        return null;
+    }
+    SmaxElement nextElement = element.getFirstChildElement();
+    if (nextElement == null) {
+      nextElement = element.getNextSiblingElement();
+    }
+    if (nextElement == null) {
+      return endElement;
     }
     return nextElement;
   }

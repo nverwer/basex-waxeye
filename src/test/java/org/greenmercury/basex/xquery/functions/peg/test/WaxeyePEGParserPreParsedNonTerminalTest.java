@@ -163,20 +163,20 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<r><X><a><b/></a></X></r>";
+    String expectedOutput = "<r><a><b/></a></r>";
     assertEquals(expectedOutput, output);
   }
 
 
   @Test
-  void test_empty_elements_6() throws Exception
+  void test_empty_elements_6a() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
     String grammar = "X <- <a> +<b> <a>";
     WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
     String xml =
       "<r>"+
-      "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent
+      "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent empty content
       "</r>";
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
@@ -187,7 +187,120 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
 
 
   @Test
+  void test_empty_elements_6b() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- <a> +<b> <a>";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "<c><a/></c><b/><c><d/></c><a/>"+ // no match, <a/> element is nested in <c>
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r><c><a/></c><b/><c><d/></c><a/></r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_empty_elements_6c() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- <a> +<b> <a>";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "<a/><c/><b/><c/><a/>"+ // when looking for another <b>, everything is transparent
+      "<a/><c/><b/><c/><a/>"+ // until the <b> is found here
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r><X><a/><c/><b/><c/><a/><a/><c/><b/><c/><a/></X></r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_empty_elements_6d() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- <a> +<b> <a>";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent empty content
+      "."+
+      "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent empty content
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r><X><a/><c/><b/><c/><a/></X>.<X><a/><c/><b/><c/><a/></X></r>"; // <r><X><a/><c/><b/><c/><a/></X>.<a/><c/><b/><c/><a/></r>
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_empty_elements_7() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- <a> *'x' +<b> *'y' <a>";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "<a/>x<c/>x<b/><c>y</c><a/>"+ // match, <c/> elements are transparent empty content
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r><X><a/>x<c/>x<b/><c>y</c><a/></X></r>"; // <r><X><a/><b/><a/></X><c/><c/></r>
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
   void test_non_empty_elements_1() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- '(' <a> +<b> <a> ')'";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "(<a>a1</a><b>b1</b><b/><a>a2</a>) (match)"+
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    // Count the number of <X> elements in the output.
+    long countX = Pattern.compile("<X>").matcher(output).results().count();
+    assertEquals(1, countX, "Expected exactly one <X> element in the output, but found "+countX+" in: " + output);
+  }
+
+
+  @Test
+  void test_non_empty_elements_2() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- '(' <a> +<b> <a> ')'";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml =
+      "<r>"+
+      "(<a>a1</a>intervening<b>b1</b><b/><a>a2</a>) (no match)"+
+      "</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    // Count the number of <X> elements in the output.
+    long countX = Pattern.compile("<X>").matcher(output).results().count();
+    assertEquals(1, countX, "Expected exactly one <X> element in the output, but found "+countX+" in: " + output);
+  }
+
+
+  @Test
+  void test_non_empty_elements_3() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
     String grammar = "X <- '(' <a> +<b> <a> ')'";

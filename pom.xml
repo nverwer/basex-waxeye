@@ -50,7 +50,7 @@
     <dependency>
       <groupId>org.waxeye</groupId>
       <artifactId>waxeye</artifactId>
-      <version>1.0</version>
+      <version>1.0.0NV</version>
     </dependency>
 
     <dependency>
@@ -87,7 +87,7 @@
             <configuration>
               <groupId>org.waxeye</groupId>
               <artifactId>waxeye</artifactId>
-              <version>1.0</version>
+              <version>1.0.0NV</version>
               <packaging>jar</packaging>
               <file>${basedir}/lib/waxeye.jar</file>
               <generatePom>true</generatePom>

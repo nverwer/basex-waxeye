@@ -113,7 +113,7 @@ public class WaxeyePEGParser
   private boolean allowUnmatchedText;
   private boolean matchWholeWords;
   private boolean cache;
-  private boolean parseErrors;
+  private boolean showParseErrors;
   private boolean showParseTree;
   private boolean normalize;
   private String namespacePrefix;
@@ -165,7 +165,7 @@ public class WaxeyePEGParser
     this.allowUnmatchedText = !(completeMatch || adjacentMatches);
     this.matchWholeWords = getOption(options, "match-whole-words", false);
     this.cache = getOption(options, "cache", false);
-    this.parseErrors = getOption(options, "parse-errors", false);
+    this.showParseErrors = getOption(options, "parse-errors", false);
     this.showParseTree = getOption(options, "show-parse-tree", false);
     this.normalize = getOption(options, "normalize", false);
     this.namespacePrefix = getOption(options, "namespace-prefix", null);
@@ -374,16 +374,18 @@ public class WaxeyePEGParser
     parser.setEofCheck(completeMatch);
     long nrScans;
     if (parseWithinElement != null) {
+      // Traverse the DOM tree and only scan within the elements indicated by parseWithinElement and parseWithinNamespace.
       nrScans = traverseAndScan(smaxDocument, textFragment, smaxDocument.getMarkup());
     } else {
-      nrScans = scanFragment(smaxDocument, textFragment, 0);
+      // Scan within the root element.
+      nrScans = scanFragment(smaxDocument, smaxDocument.getMarkup(), textFragment, 0);
     }
     long elapsedTime = System.currentTimeMillis()-startTime;
     logger.info("WaxeyePEGParser: Parsing with "+grammarURL+" took "+elapsedTime+" ms, for "+nrScans+" scans.");
   }
 
   /**
-   * Traverse the DOM tree and only scan within the indicated elements.
+   * Traverse the DOM tree and only scan within the elements indicated by parseWithinElement and parseWithinNamespace.
    * @param smaxDocument
    * @param textFragment
    * @param element
@@ -400,9 +402,10 @@ public class WaxeyePEGParser
          )) {
       int textStart = element.getStartPos();
       int textEnd = element.getEndPos();
-      nrScans = scanFragment(smaxDocument, textFragment.subSequence(textStart, textEnd), textStart);
+      nrScans = scanFragment(smaxDocument, element, textFragment.subSequence(textStart, textEnd), textStart);
     } else if (element.hasChildNodes()) {
-      for (SmaxElement child : element.getChildren()) {
+      List <SmaxElement> children = element.getChildren();
+      for (SmaxElement child : children) {
         nrScans += traverseAndScan(smaxDocument, textFragment, child);
       }
     }
@@ -412,12 +415,13 @@ public class WaxeyePEGParser
   /**
    * Scan a SMAX document or a fragment of it.
    * @param smaxDocument
+   * @param withinElement the element within which the textFragment is located.
    * @param textFragment the text of the fragment to scan
    * @param textStart the start position of the fragment within the document
    * @return the number of scans (parsing attempts)
    * @throws QueryException
    */
-  private long scanFragment(SmaxDocument smaxDocument, CharSequence textFragment, int textStart) throws QueryException
+  private long scanFragment(SmaxDocument smaxDocument, SmaxElement withinElement, CharSequence textFragment, int textStart) throws QueryException
   {
     long nrScans = 0L;
     // Make an ParserSmaxInput for the textFragment.
@@ -436,7 +440,7 @@ public class WaxeyePEGParser
     // A function that checks if a pre-parsed non-terminal is present at the current position in the input.
     final BiFunction<String, IParserInput<SmaxElement>,Integer> preparsedNonTerminalAt =
         (String nonTerminalName, IParserInput<SmaxElement> smaxInput) -> this.preparsedNonTerminalAt(smaxDocument, nonTerminalName, (ParserSmaxInput)smaxInput);
-    // Allow textPosition to go up to textEnd, to allow zero-length matches at the end of the input.
+    // Allow textPosition to go up to textEnd (textPosition <= textEnd), to allow zero-length pre-parsed non-terminal matches at the end of the input.
     // Stop if textPosition does not advance, to prevent infinite loops.
     while (textPosition <= textEnd && textPosition > previousTextPosition) {
       // Skip spaces if unmatched text is allowed and only whole words are matched.
@@ -445,20 +449,26 @@ public class WaxeyePEGParser
           unmatched.append(textFragment.charAt(textPosition++));
         }
       }
+      // The previous text position is where we start parsing.
+      previousTextPosition = textPosition;
+      // Is there still text to parse after skipping spaces?
       if (textPosition <= textEnd) {
         // Match the input from textPosition.
         input.setPosition(textPosition);
-        long startTime = new Date().getTime();
-        // This is where the parser does its work.
+        // Try parsing from the current position.
         ++nrScans;
+        long startTime = System.currentTimeMillis();
         final ParseResult<?> parseResult = parser.parse(input, preparsedNonTerminalAt);
-        // Parse errors are significant if completeMatch or adjacentMatches (!allowUnmatchedText).
-        if (!allowUnmatchedText && parseResult.getError() != null) {
+        long milliSecondsUsed = System.currentTimeMillis() - startTime;
+        // Parse errors are significant if there is unmatched text, and it is not allowed.
+        ParseError parseError = parseResult.getError();
+        boolean unmatchedTextExists = textPosition < textEnd;
+        if (parseError != null && unmatchedTextExists && !allowUnmatchedText) {
           // There was a parse error.
-          if (parseErrors) {
-            new XmlVisitor(parseResult, textFragment, textStart, smaxDocument);
+          if (showParseErrors) {
+            new XmlVisitor(parseResult, withinElement, textStart, smaxDocument);
           } else {
-            String message = "Parser error: "+parseResult.getError().toString()+"\n"+
+            String message = "Parse error: "+parseError.toString()+"\n"+
                 "Parsing ["+textFragment.subSequence(textPosition, Math.min(textFragment.length(), textPosition+12))+"]";
             throw new QueryException(message);
           }
@@ -470,11 +480,10 @@ public class WaxeyePEGParser
             // Insert XML elements for a non-empty match.
             handleText(unmatched);
             if (showParseTree) {
-              long milliSeconds = new Date().getTime() - startTime;
               String parseTree = parseResult.toString();
-              insertComment("Parsing took " + milliSeconds + " ms.\n" + parseTree);
+              insertComment("Parsing took " + milliSecondsUsed + " ms.\n" + parseTree);
             }
-            new XmlVisitor(parseResult, textFragment, textStart, smaxDocument);
+            new XmlVisitor(parseResult, withinElement, textStart, smaxDocument);
             textPosition = nextPosition;
           } else if (allowUnmatchedText && textPosition < textEnd) {
             // Skip one character if there is an ignored error or empty match, and more text is available.
@@ -482,8 +491,7 @@ public class WaxeyePEGParser
             unmatched.append(unmatchedChar);
             // If only whole words are matched, and the current character was part of a word, skip the rest of the word.
             if (matchWholeWords && Character.isLetterOrDigit(unmatchedChar)) {
-              while (textPosition < textEnd
-                  && Character.isLetterOrDigit(textFragment.charAt(textPosition))) {
+              while (textPosition < textEnd && Character.isLetterOrDigit(textFragment.charAt(textPosition))) {
                 unmatched.append(textFragment.charAt(textPosition++));
               }
             }
@@ -493,7 +501,6 @@ public class WaxeyePEGParser
           }
         }
       }
-      previousTextPosition = textPosition;
     }
     handleText(unmatched);
     return nrScans;
@@ -525,11 +532,11 @@ public class WaxeyePEGParser
     // The last visited element. One of the elements following it can be the pre-parsed non-terminal.
     SmaxElement element = input.getExtendedData();
     System.out.println("\n--- Looking for pre-parsed non-terminal <"+nonTerminalName+"> at position "+startPos+" with extended data: "+(element == null ? "new" : element.toString()));
-    // The next element may contain the pre-parsed non-terminal.
+    // The next element that may contain the pre-parsed non-terminal.
     if (element == null) {
       element = smaxDocument.getMarkup(); // Start at the root element
     } else {
-      element = input.getNextElement(element);
+      element = input.getNextChildOrSiblingElement(element);
     }
     System.out.println("--- Start searching from element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
     // Find the first element at the required start position.
@@ -563,10 +570,11 @@ public class WaxeyePEGParser
     /* The set of parent elements, used to determine where to insert new elements. */
     private HashSet<SmaxElement> parentElements = new HashSet<>();
 
-    public XmlVisitor(ParseResult<?> parseResult, CharSequence fragment, int startPosition, SmaxDocument smaxDocument) throws QueryException
+    public XmlVisitor(ParseResult<?> parseResult, SmaxElement withinElement, int startPosition, SmaxDocument smaxDocument) throws QueryException
     {
       this.smaxDocument = smaxDocument;
       this.startPosition = startPosition;
+      parentElements.add(withinElement); // Use INNER balancing when inserting a non-terminal element in withinElement.
       if (parseResult.getAST() != null) {
         parseResult.getAST().acceptASTVisitor(this);
       } else if (parseResult.getError() != null) {
@@ -594,18 +602,65 @@ public class WaxeyePEGParser
     public void visitAST(IAST<?> node) {
       Position pos = node.getPosition();
       String localName = node.getType().toString();
-      SmaxElement ntElement =
+      SmaxElement nonTerminalElement =
         ( namespaceUri == null )
         ? new SmaxElement(localName)
         : new SmaxElement(namespaceUri, (namespacePrefix == null ? localName : String.join(":", namespacePrefix, localName)));
       // Insert the new element. When inserting in one of the elements in parentElements, use INNER balancing instead of OUTER.
-      ntElement = this.smaxDocument.insertMarkup(ntElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), parentElements);
-      parentElements.add(ntElement);
+      nonTerminalElement = this.smaxDocument.insertMarkup(nonTerminalElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), parentElements);
+      // Insert the new element.
+      //nonTerminalElement = this.smaxDocument.insertMarkup(nonTerminalElement, Balancing.INNER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), null);
+      parentElements.add(nonTerminalElement);
+      // Visit the children of this node. Nte if there are any pre-parsed non-terminals.
+      boolean hasPPNT = false;
       for (IAST<?> child : node.getChildren()) {
+        if (child instanceof IPreParsedNonTerminal<?>) {
+          hasPPNT = true;
+        }
         child.acceptASTVisitor(this);
       }
+      if (hasPPNT) {
+        adoptPreParsedNonTerminalChildren(node, nonTerminalElement);
+      }
       // Here we know the actual content of the non-terminal element, which may contain empty pre-parsed non-terminals.
-      parentElements.remove(ntElement);
+      parentElements.remove(nonTerminalElement);
+    }
+
+    /**
+     * Move all child SmaxElements that correspond to pre-parsed non-terminals and other child elements in between into the given non-terminal element.
+     * @param node the AST node whose children are to be processed.
+     * @param nonTerminalElement the SmaxElement that corresponds to the AST node.
+     */
+    private void adoptPreParsedNonTerminalChildren(IAST<?> node, SmaxElement nonTerminalElement) {
+      // Find the SmaxElements corresponding to the first and last pre-parsed non-terminals among the children of this AST.
+      SmaxElement[] firstLastPPNTElement = node.getChildren().stream()
+        .reduce(new SmaxElement[2],
+          (firstLast, next) -> {
+            if (next instanceof IPreParsedNonTerminal<?>) {
+              SmaxElement childElement = ((IPreParsedNonTerminal<SmaxElement>)next).getExtendedData();
+              if (childElement != null) {
+                if (firstLast[0] == null) firstLast[0] = childElement;
+                firstLast[1] = childElement;
+              }
+            }
+            return firstLast;
+          },
+          (part1, part2) -> {
+            if (part1[0] == null) part1[0] = part2[0];
+            if (part2[1] != null) part1[1] = part2[1];
+            return part1;
+          });
+      if (firstLastPPNTElement[0] != null && firstLastPPNTElement[0].getParentNode() != firstLastPPNTElement[1].getParentNode()) {
+        throw new RuntimeException("Internal error: Pre-parsed non-terminals in a single AST node have different parent nodes.");
+      }
+      // Move all elements between first and last pre-parsed non-terminal into the non-terminal element.
+      SmaxElement childElement = firstLastPPNTElement[0];
+      while (childElement != null) {
+        SmaxElement nextSibling = childElement.getNextSiblingElement();
+        childElement.moveInto(nonTerminalElement);
+        if (childElement == firstLastPPNTElement[1]) break;
+        childElement = nextSibling;
+      }
     }
 
     @Override
