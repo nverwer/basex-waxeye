@@ -49,7 +49,6 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
    */
   public ParserSmaxInput(final char[] input)
   {
-    System.out.println("-- Creating new ParserSmaxInput");
     this.input = input;
     this.position = 0;
     this.inputSize = input.length;
@@ -75,7 +74,6 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
   {
       if (position < inputSize)
       {
-          System.out.println("-- Reset extended data to null in consume()");
           this.extendedData = null; // Reset the markup position.
           return input[position++];
       }
@@ -120,10 +118,8 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
   public void setPosition(final int position)
   {
       if (position == this.position) {
-          System.out.println("-- No change in setPosition("+position+")");
           return; // No change.
       }
-      System.out.println("-- Reset extended data to null in setPosition("+position+")");
       this.extendedData = null; // Reset the markup position.
       if (position < 0)
       {
@@ -169,7 +165,7 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
               result = mult * (result + c);
           }
       }
-      result = mult * result + position + extendedData.hashCode();
+      result = mult * result + position + (extendedData == null ? 0 : extendedData.hashCode());
       return Math.abs(result);
   }
 
@@ -182,7 +178,6 @@ public class ParserSmaxInput implements IParserInput<SmaxElement>
   @Override
   public void setExtendedData(SmaxElement extendedData)
   {
-      System.out.println("-- setExtendedData: " + (extendedData == null ? "null" : extendedData.toString()));
       this.extendedData = extendedData;
   }
 

@@ -473,8 +473,13 @@ public class WaxeyePEGParser
             throw new QueryException(message);
           }
         } else {
-          boolean hasNonEmptyParseTree = parseResult.getAST() != null && !( parseResult.getAST().getType().toString().equals("_Empty") ) ;
-          int nextPosition = hasNonEmptyParseTree ? parseResult.getAST().getPosition().getEndIndex() : textEnd;
+          boolean hasNonEmptyParseTree = parseResult.getAST() != null && !( parseResult.getAST().getType().toString().equals("_Empty") );
+          // If there was a match, the next position is after the match. If the match is empty, the text position has not advanced.
+          int nextPosition = hasNonEmptyParseTree ? parseResult.getAST().getPosition().getEndIndex() : textPosition;
+          // If there was an empty match, the text position has not advanced, and we do that explicitly.
+          if (nextPosition == previousTextPosition) {
+            nextPosition++;
+          }
           boolean nextCharacterInWord = nextPosition < textEnd && Character.isLetterOrDigit(textFragment.charAt(nextPosition));
           if (hasNonEmptyParseTree && (!matchWholeWords || !nextCharacterInWord)) {
             // Insert XML elements for a non-empty match.
@@ -531,31 +536,26 @@ public class WaxeyePEGParser
     int startPos = input.getPosition();
     // The last visited element. One of the elements following it can be the pre-parsed non-terminal.
     SmaxElement element = input.getExtendedData();
-    System.out.println("\n--- Looking for pre-parsed non-terminal <"+nonTerminalName+"> at position "+startPos+" with extended data: "+(element == null ? "new" : element.toString()));
     // The next element that may contain the pre-parsed non-terminal.
     if (element == null) {
       element = smaxDocument.getMarkup(); // Start at the root element
     } else {
       element = input.getNextChildOrSiblingElement(element);
     }
-    System.out.println("--- Start searching from element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
     // Find the first element at the required start position.
     while (element != input.endElement && element.getStartPos() < startPos) {
-      System.out.println("--- Skipping element: "+element.toString());
+      // Skip this element.
       element = input.getNextElement(element);
-      System.out.println("--- After skipping element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
     }
     // Search for the pre-parsed non-terminal at the required start position.
     while (element != input.endElement && element.getStartPos() == startPos) {
-      System.out.println("--- Checking element: "+(element != null ? element.toString() : "THIS CAN NOT HAPPEN, element cannot be null."));
       if (nonTerminalName.equals(element.getLocalName())) {
-        System.out.println("--- Found pre-parsed non-terminal: "+element.toString());
+        // The pre-parsed non-terminal has been found.
         input.setExtendedData(element); // This is now the last visited element.
         return element.getEndPos() - element.getStartPos();
       }
       element = input.getNextElement(element);
     }
-    System.out.println("--- No pre-parsed non-terminal found for "+nonTerminalName+" at position "+startPos);
     return -1;
   }
 
@@ -608,10 +608,8 @@ public class WaxeyePEGParser
         : new SmaxElement(namespaceUri, (namespacePrefix == null ? localName : String.join(":", namespacePrefix, localName)));
       // Insert the new element. When inserting in one of the elements in parentElements, use INNER balancing instead of OUTER.
       nonTerminalElement = this.smaxDocument.insertMarkup(nonTerminalElement, Balancing.OUTER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), parentElements);
-      // Insert the new element.
-      //nonTerminalElement = this.smaxDocument.insertMarkup(nonTerminalElement, Balancing.INNER, startPosition + pos.getStartIndex(), startPosition + pos.getEndIndex(), null);
       parentElements.add(nonTerminalElement);
-      // Visit the children of this node. Nte if there are any pre-parsed non-terminals.
+      // Visit the children of this node. Note if there are any pre-parsed non-terminals.
       boolean hasPPNT = false;
       for (IAST<?> child : node.getChildren()) {
         if (child instanceof IPreParsedNonTerminal<?>) {
@@ -673,7 +671,6 @@ public class WaxeyePEGParser
 
     @Override
     public void visitPreParsedNonTerminal(IPreParsedNonTerminal tree) {
-      System.out.println("### XmlVisitor: PreParsedNonTerminal "+tree.getName());
     }
 
   }

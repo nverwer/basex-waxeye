@@ -232,13 +232,13 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     String xml =
       "<r>"+
       "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent empty content
-      "."+
+      "."+                    // This stops the following elements from (transparently) matching.
       "<a/><c/><b/><c/><a/>"+ // match, <c/> elements are transparent empty content
       "</r>";
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<r><X><a/><c/><b/><c/><a/></X>.<X><a/><c/><b/><c/><a/></X></r>"; // <r><X><a/><c/><b/><c/><a/></X>.<a/><c/><b/><c/><a/></r>
+    String expectedOutput = "<r><X><a/><c/><b/><c/><a/></X>.<X><a/><c/><b/><c/><a/></X></r>";
     assertEquals(expectedOutput, output);
   }
 
@@ -256,7 +256,39 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<r><X><a/>x<c/>x<b/><c>y</c><a/></X></r>"; // <r><X><a/><b/><a/></X><c/><c/></r>
+    String expectedOutput = "<r><X><a/>x<c/>x<b/><c>y</c><a/></X></r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_non_empty_elements_0a() throws Exception
+  {
+    // Matching the non-terminal X never really starts.
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- '(' <a> +<b> <a> ')'";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml = "<r>..</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r>..</r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_non_empty_elements_0b() throws Exception
+  {
+    // Matching the non-terminal X starts twice but is not completed.
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- '(' <a> +<b> <a> ')'";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml = "<r>((</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r>((</r>";
     assertEquals(expectedOutput, output);
   }
 
@@ -274,9 +306,8 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    // Count the number of <X> elements in the output.
-    long countX = Pattern.compile("<X>").matcher(output).results().count();
-    assertEquals(1, countX, "Expected exactly one <X> element in the output, but found "+countX+" in: " + output);
+    String expectedOutput = "<r><X>(<a>a1</a><b>b1</b><b/><a>a2</a>)</X> (match)</r>";
+    assertEquals(expectedOutput, output);
   }
 
 
@@ -286,6 +317,7 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     Map<String, String> options = new HashMap<String, String>();
     String grammar = "X <- '(' <a> +<b> <a> ')'";
     WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    // No match, because of intervening characters.
     String xml =
       "<r>"+
       "(<a>a1</a>intervening<b>b1</b><b/><a>a2</a>) (no match)"+
@@ -293,9 +325,8 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    // Count the number of <X> elements in the output.
-    long countX = Pattern.compile("<X>").matcher(output).results().count();
-    assertEquals(1, countX, "Expected exactly one <X> element in the output, but found "+countX+" in: " + output);
+    String expectedOutput = "<r>(<a>a1</a>intervening<b>b1</b><b/><a>a2</a>) (no match)</r>";
+    assertEquals(expectedOutput, output);
   }
 
 
@@ -313,9 +344,8 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax(xml);
     parser.scan(document);
     String output = simplify(document);
-    // Count the number of <X> elements in the output.
-    long countX = Pattern.compile("<X>").matcher(output).results().count();
-    assertEquals(1, countX, "Expected exactly one <X> element in the output, but found "+countX+" in: " + output);
+    String expectedOutput = "<r><X>(<a>a1</a><b>b1</b><b/><a>a2</a>)</X> (match)(<a>a1</a>intervening<b>b1</b><b/><a>a2</a>) (no match)</r>";
+    assertEquals(expectedOutput, output);
   }
 
 
