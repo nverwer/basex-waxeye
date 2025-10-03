@@ -41,13 +41,15 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
 
 
   private final String calculatorGrammar =
-    "sum   <- prod *(ws [+-] ws prod)\n" +
-    "prod  <- unary *(ws [*/] ws unary)\n" +
-    "unary <= '-' ws unary\n" +
-    "       | :'(' ws sum ws :')'\n" +
-    "       | num\n" +
-    "num   <= <number>\n" +
-    "ws    <: *[ \\t\\n\\r]";
+    "sum    <- prod *(ws sumop ws prod)\n" +
+    "prod   <- unary *(ws prodop ws unary)\n" +
+    "sumop  <= <plus> | <minus> | [+-]\n" +
+    "prodop <= [*/]\n" +
+    "unary  <= '-' ws unary\n" +
+    "        | :'(' ws sum ws :')'\n" +
+    "        | num\n" +
+    "num    <= <number>\n" +
+    "ws     <: *[ \\t\\n\\r]";
 
 
 
@@ -60,6 +62,20 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     parser.scan(document);
     String output = simplify(document);
     String expectedOutput = "<r><Sum><Prod><number>1</number></Prod> + <Prod><number>23</number></Prod></Sum></r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_calc_2() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<r><number>1</number> <plus>-|-</plus> <number>23</number></r>");
+    parser.scan(document);
+    String output = simplify(document);
+System.out.println("Result: "+output);
+    String expectedOutput = "<r><Sum><Prod><number>1</number></Prod> <plus>-|-</plus> <Prod><number>23</number></Prod></Sum></r>";
     assertEquals(expectedOutput, output);
   }
 
@@ -382,5 +398,19 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     assertEquals(expectedOutput, output);
   }
 
+
+  @Test
+  void test_negative_1() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    String grammar = "X <- 'a' !<a>\n";
+    WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
+    String xml = "<r>a<a>.</a>a</r>";
+    SmaxDocument document = XmlString.toSmax(xml);
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r>a<a>.</a><X>a</X></r>";
+    assertEquals(expectedOutput, output);
+  }
 
 }

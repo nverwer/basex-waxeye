@@ -121,12 +121,14 @@ public class WaxeyePEGParser
 
   private Parser<?> parser;
   private String grammarURL;
+  private boolean grammarIsURL;
 
 
   public WaxeyePEGParser(URL grammarURL, Map<String, String> options, Logger logger)
   {
     initFirst(options, logger);
     this.grammarURL = grammarURL.toString();
+    this.grammarIsURL = true;
     try {
       readGrammar(grammarURL);
     } catch (IOException | QueryException e) {
@@ -140,6 +142,7 @@ public class WaxeyePEGParser
   {
     initFirst(options, logger);
     this.grammarURL = grammarURL;
+    this.grammarIsURL = false;
     try {
       readGrammar(grammarURL);
     } catch (IOException | QueryException e) {
@@ -381,7 +384,7 @@ public class WaxeyePEGParser
       nrScans = scanFragment(smaxDocument, smaxDocument.getMarkup(), textFragment, 0);
     }
     long elapsedTime = System.currentTimeMillis()-startTime;
-    logger.info("WaxeyePEGParser: Parsing with "+grammarURL+" took "+elapsedTime+" ms, for "+nrScans+" scans.");
+    logger.info("WaxeyePEGParser: Parsing with "+(grammarIsURL ? grammarURL : "grammar from string")+" took "+elapsedTime+" ms, for "+nrScans+" scans.");
   }
 
   /**
@@ -617,7 +620,8 @@ public class WaxeyePEGParser
         }
         child.acceptASTVisitor(this);
       }
-      if (hasPPNT) {
+      // Visiting the children of `node` may provide children to the `nonTerminalElement`. In this case, we don't need to adopt pre-parsed non-terminal children.
+      if (hasPPNT && !nonTerminalElement.hasChildNodes()) {
         adoptPreParsedNonTerminalChildren(node, nonTerminalElement);
       }
       // Here we know the actual content of the non-terminal element, which may contain empty pre-parsed non-terminals.
@@ -627,7 +631,7 @@ public class WaxeyePEGParser
     /**
      * Move all child SmaxElements that correspond to pre-parsed non-terminals and other child elements in between into the given non-terminal element.
      * @param node the AST node whose children are to be processed.
-     * @param nonTerminalElement the SmaxElement that corresponds to the AST node.
+     * @param nonTerminalElement the SmaxElement that corresponds to the AST node. This element must not have children yet.
      */
     private void adoptPreParsedNonTerminalChildren(IAST<?> node, SmaxElement nonTerminalElement) {
       // Find the SmaxElements corresponding to the first and last pre-parsed non-terminals among the children of this AST.
@@ -652,13 +656,10 @@ public class WaxeyePEGParser
         throw new RuntimeException("Internal error: Pre-parsed non-terminals in a single AST node have different parent nodes.");
       }
       // Move all elements between first and last pre-parsed non-terminal into the non-terminal element.
-      SmaxElement childElement = firstLastPPNTElement[0];
-      while (childElement != null) {
-        SmaxElement nextSibling = childElement.getNextSiblingElement();
-        childElement.moveInto(nonTerminalElement);
-        if (childElement == firstLastPPNTElement[1]) break;
-        childElement = nextSibling;
-      }
+      int movingChildStart = firstLastPPNTElement[0].getIndexInParent();
+      int movingChildEnd = firstLastPPNTElement[1].getIndexInParent();
+      List<SmaxElement> movingChildren = firstLastPPNTElement[0].getParentNode().removeChildren(movingChildStart, movingChildEnd+1);
+      nonTerminalElement.setChildren(movingChildren);
     }
 
     @Override
