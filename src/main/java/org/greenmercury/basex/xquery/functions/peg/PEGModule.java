@@ -23,7 +23,7 @@ import org.basex.query.value.type.SeqType;
 import org.basex.query.var.Var;
 import org.basex.query.var.VarRef;
 import org.basex.query.var.VarScope;
-import org.basex.util.hash.IntObjMap;
+import org.basex.util.hash.IntObjectMap;
 import org.basex.util.log.Log;
 import org.greenmercury.smax.SmaxDocument;
 import org.greenmercury.smax.SmaxElement;
@@ -178,7 +178,7 @@ public class PEGModule extends QueryModule
     }
 
     @Override
-    public Expr copy(CompileContext cc, IntObjMap<Var> vm)
+    public Expr copy(CompileContext cc, IntObjectMap<Var> vm)
     {
       Expr[] functionParameterExprs = copyAll(cc, vm, this.args());
       return copyType(new PEGParserFunction(this.parser, this.logger, this.seqType(), functionParameterExprs));
