@@ -375,6 +375,7 @@ public class WaxeyePEGParser
     long startTime = System.currentTimeMillis();
     CharSequence textFragment = smaxDocument.getContent();
     parser.setEofCheck(completeMatch);
+    parser.setDebug(true);
     long nrScans;
     if (parseWithinElement != null) {
       // Traverse the DOM tree and only scan within the elements indicated by parseWithinElement and parseWithinNamespace.
@@ -471,8 +472,10 @@ public class WaxeyePEGParser
           if (showParseErrors) {
             new XmlVisitor(parseResult, withinElement, textStart, smaxDocument);
           } else {
-            String message = "Parse error: "+parseError.toString()+"\n"+
-                "Parsing ["+textFragment.subSequence(textPosition, Math.min(textFragment.length(), textPosition+12))+"]";
+            int line = parseError.getLine();
+            int column = parseError.getColumn();
+            String inputLocation = nthLine(textFragment, line) + "\n" + "-".repeat(Math.max(0, column-1)) + "^\n";
+            String message = "Parse error: "+parseError.toString()+" at character '"+textFragment.charAt(parseError.getPosition())+"'\n" + inputLocation;
             throw new QueryException(message);
           }
         } else {
@@ -512,6 +515,20 @@ public class WaxeyePEGParser
     }
     handleText(unmatched);
     return nrScans;
+  }
+
+  private String nthLine(CharSequence text, int n) {
+    BufferedReader reader = new BufferedReader(new InputStreamReader(new java.io.ByteArrayInputStream(text.toString().getBytes())));
+    try {
+      for (int i = 0; i < n-1; i++) {
+        if (reader.readLine() == null) {
+          return "";
+        }
+      }
+      return reader.readLine();
+    } catch (IOException e) {
+      return "";
+    }
   }
 
 
