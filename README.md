@@ -55,15 +55,17 @@ Compiling a grammar into a parsing function is slow, and the parsing function re
 The `peg:waxeye-peg-parser` function accepts the following options:
 
 * `modular` Set to true if the grammar is [modular](https://waxeye.org/manual#_modular_grammars). (Default is false.)
+* `parse-within-element` If set to the local name (without namespace prefix) of an element, only text within elements with this name will be parsed.
+* `parse-within-namespace` If 'parse-within-element' is set, this may be set to the namespace URI of elements within which the parser will work.
 * `complete-match` Set to true if the complete input text must be parsed as one matched fragment. (Default is false.)
 * `adjacent-matches` Set to true if the complete input must be consumed as adjacent matched fragments. (Default is false.)
 * `match-whole-words` Set to true to only match whole words. (Default is false.)
+* `cache` Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.
 * `parse-errors` Set to true to include errors in the output and not trigger an exception. (Default is false.)
 * `normalize` Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)
 * `cache` Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.
 * `namespace-prefix` The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
 * `namespace-uri` The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace). This option must be present if the 'namespace-prefix' option is defined.
-
 
 If `complete-match` is true, `adjacent-matches` is ignored because there must be only one match.
 

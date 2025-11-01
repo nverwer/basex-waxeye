@@ -475,7 +475,9 @@ public class WaxeyePEGParser
             int line = parseError.getLine();
             int column = parseError.getColumn();
             String inputLocation = nthLine(textFragment, line) + "\n" + "-".repeat(Math.max(0, column-1)) + "^\n";
-            String message = "Parse error: "+parseError.toString()+" at character '"+textFragment.charAt(parseError.getPosition())+"'\n" + inputLocation;
+            String characterContext = (parseError.getPosition() > 0 && parseError.getPosition() < textFragment.length()) ?
+                " at character '"+textFragment.charAt(parseError.getPosition())+"'"+"\n"+inputLocation : " at end of input";
+            String message = "Parse error: "+parseError.toString()+characterContext;
             throw new QueryException(message);
           }
         } else {
@@ -525,7 +527,8 @@ public class WaxeyePEGParser
           return "";
         }
       }
-      return reader.readLine();
+      String line = reader.readLine();
+      return line == null ? "" : line;
     } catch (IOException e) {
       return "";
     }
