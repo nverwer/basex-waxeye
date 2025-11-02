@@ -48,20 +48,20 @@ public class WaxeyePEGParserWithinElementTest
     "ws    <: *[ \\t\\n\\r]";
 
   @Test
-  void test_Grammar_1() throws Exception
+  void test_grammar_1() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
     options.put("parse-within-element", "c");
     WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
-    SmaxDocument document = XmlString.toSmax("<r><c>1 + 1</c> in binary is <c>10</c></r>");
+    SmaxDocument document = XmlString.toSmax("<r>The value of <c>1 + 1</c> in binary is <c>10</c></r>");
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<r><c><Sum><Num>1</Num> + <Num>1</Num></Sum></c> in binary is <c><Num>10</Num></c></r>";
+    String expectedOutput = "<r>The value of <c><Sum><Num>1</Num> + <Num>1</Num></Sum></c> in binary is <c><Num>10</Num></c></r>";
     assertEquals(expectedOutput, output);
   }
 
   @Test
-  void test_Grammar_2() throws Exception
+  void test_grammar_2() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
     options.put("parse-within-element", "c");

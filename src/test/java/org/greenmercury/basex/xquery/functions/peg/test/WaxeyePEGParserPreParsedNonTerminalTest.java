@@ -74,8 +74,21 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
     SmaxDocument document = XmlString.toSmax("<r><number>1</number> <plus>-|-</plus> <number>23</number></r>");
     parser.scan(document);
     String output = simplify(document);
-System.out.println("Result: "+output);
     String expectedOutput = "<r><Sum><Prod><number>1</number></Prod> <plus>-|-</plus> <Prod><number>23</number></Prod></Sum></r>";
+    assertEquals(expectedOutput, output);
+  }
+
+
+  @Test
+  void test_withinElement_1() throws Exception
+  {
+    Map<String, String> options = new HashMap<String, String>();
+    options.put("parse-within-element", "c");
+    WaxeyePEGParser parser = new WaxeyePEGParser(calculatorGrammar, options, logger);
+    SmaxDocument document = XmlString.toSmax("<r>The value of <c><number>1</number> + <number>1</number></c> in binary is <number>10</number></r>");
+    parser.scan(document);
+    String output = simplify(document);
+    String expectedOutput = "<r>The value of <c><Sum><Prod><number>1</number></Prod> + <Prod><number>1</number></Prod></Sum></c> in binary is <number>10</number></r>";
     assertEquals(expectedOutput, output);
   }
 

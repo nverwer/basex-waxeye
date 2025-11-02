@@ -68,6 +68,7 @@ import org.waxeye.parser.Parser;
  *       <li>namespace-prefix The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
  *       <li>namespace-uri The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace).
  *           This option must be present if the 'namespace-prefix' option is defined.
+ *       <li>debug Set to true to enable debugging in the Waxeye parser. Default is false.</li>
  *     </ul>
  *   </li>
  * </ul>
@@ -118,6 +119,7 @@ public class WaxeyePEGParser
   private boolean normalize;
   private String namespacePrefix;
   private String namespaceUri;
+  private boolean debug;
 
   private Parser<?> parser;
   private String grammarURL;
@@ -173,6 +175,7 @@ public class WaxeyePEGParser
     this.normalize = getOption(options, "normalize", false);
     this.namespacePrefix = getOption(options, "namespace-prefix", null);
     this.namespaceUri = getOption(options, "namespace-uri", null);
+    this.debug = getOption(options, "debug", false);
     // Make a random internal name, used in the filename for a local copy of the grammar.
     Random random = new Random();
     this.internalName = "G" + random.ints(48, 123)
@@ -375,7 +378,7 @@ public class WaxeyePEGParser
     long startTime = System.currentTimeMillis();
     CharSequence textFragment = smaxDocument.getContent();
     parser.setEofCheck(completeMatch);
-    parser.setDebug(true);
+    parser.setDebug(debug);
     long nrScans;
     if (parseWithinElement != null) {
       // Traverse the DOM tree and only scan within the elements indicated by parseWithinElement and parseWithinNamespace.
@@ -390,9 +393,9 @@ public class WaxeyePEGParser
 
   /**
    * Traverse the DOM tree and only scan within the elements indicated by parseWithinElement and parseWithinNamespace.
-   * @param smaxDocument
-   * @param textFragment
-   * @param element
+   * @param smaxDocument the document that is being parsed / matched.
+   * @param textFragment the complete content of the document.
+   * @param element the current element that is being traversed.
    * @return the number of scans (parsing attempts)
    * @throws QueryException
    */
@@ -404,6 +407,7 @@ public class WaxeyePEGParser
          ( (parseWithinNamespace == null || parseWithinNamespace.isEmpty()) && (elementNsURI == null || elementNsURI.isEmpty()) ||
            parseWithinNamespace.equals(elementNsURI)
          )) {
+      // Parse / match within this element.
       int textStart = element.getStartPos();
       int textEnd = element.getEndPos();
       nrScans = scanFragment(smaxDocument, element, textFragment.subSequence(textStart, textEnd), textStart);
@@ -418,10 +422,10 @@ public class WaxeyePEGParser
 
   /**
    * Scan a SMAX document or a fragment of it.
-   * @param smaxDocument
+   * @param smaxDocument the document that is being parsed / scanned.
    * @param withinElement the element within which the textFragment is located.
-   * @param textFragment the text of the fragment to scan
-   * @param textStart the start position of the fragment within the document
+   * @param textFragment the text of the fragment to scan.
+   * @param textStart the start position of the fragment within the document.
    * @return the number of scans (parsing attempts)
    * @throws QueryException
    */
@@ -443,7 +447,7 @@ public class WaxeyePEGParser
     StringBuilder unmatched = new StringBuilder(); // Collects unmatched characters, up to the next match.
     // A function that checks if a pre-parsed non-terminal is present at the current position in the input.
     final BiFunction<String, IParserInput<SmaxElement>,Integer> preparsedNonTerminalAt =
-        (String nonTerminalName, IParserInput<SmaxElement> smaxInput) -> this.preparsedNonTerminalAt(smaxDocument, nonTerminalName, (ParserSmaxInput)smaxInput);
+        (String nonTerminalName, IParserInput<SmaxElement> smaxInput) -> this.preparsedNonTerminalAt(smaxDocument, nonTerminalName, (ParserSmaxInput)smaxInput, textStart);
     // Allow textPosition to go up to textEnd (textPosition <= textEnd), to allow zero-length pre-parsed non-terminal matches at the end of the input.
     // Stop if textPosition does not advance, to prevent infinite loops.
     while (textPosition <= textEnd && textPosition > previousTextPosition) {
@@ -552,9 +556,10 @@ public class WaxeyePEGParser
    * @param smaxDocument the document that is being parsed / scanned.
    * @param nonTerminalName the name of a pre-parsed non-terminal, as specified by the grammar.
    * @param input the current input, with its position and extended data.
+   * @param positionOffset the offset of the input position within the document.
    * @return the number of character positions within the pre-parsed non-terminal, or -1 if there is no pre-parsed non-terminal with the given name at the given position.
    */
-  private int preparsedNonTerminalAt(SmaxDocument smaxDocument, String nonTerminalName, ParserSmaxInput input)
+  private int preparsedNonTerminalAt(SmaxDocument smaxDocument, String nonTerminalName, ParserSmaxInput input, int positionOffset)
   {
     int startPos = input.getPosition();
     // The last visited element. One of the elements following it can be the pre-parsed non-terminal.
@@ -566,12 +571,12 @@ public class WaxeyePEGParser
       element = input.getNextChildOrSiblingElement(element);
     }
     // Find the first element at the required start position.
-    while (element != input.endElement && element.getStartPos() < startPos) {
+    while (element != input.endElement && element.getStartPos() < startPos + positionOffset) {
       // Skip this element.
       element = input.getNextElement(element);
     }
     // Search for the pre-parsed non-terminal at the required start position.
-    while (element != input.endElement && element.getStartPos() == startPos) {
+    while (element != input.endElement && element.getStartPos() == startPos + positionOffset) {
       if (nonTerminalName.equals(element.getLocalName())) {
         // The pre-parsed non-terminal has been found.
         input.setExtendedData(element); // This is now the last visited element.
