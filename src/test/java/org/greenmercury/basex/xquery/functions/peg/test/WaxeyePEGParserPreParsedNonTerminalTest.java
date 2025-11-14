@@ -40,15 +40,16 @@ public class WaxeyePEGParserPreParsedNonTerminalTest
   }
 
 
+  /* Some non-terminals are capitalized, so the option 'use-waxeye-names' does not matter. */
   private final String calculatorGrammar =
-    "sum    <- prod *(ws sumop ws prod)\n" +
-    "prod   <- unary *(ws prodop ws unary)\n" +
+    "Sum    <- Prod *(ws sumop ws Prod)\n" +
+    "Prod   <- unary *(ws prodop ws unary)\n" +
     "sumop  <= <plus> | <minus> | [+-]\n" +
     "prodop <= [*/]\n" +
     "unary  <= '-' ws unary\n" +
-    "        | :'(' ws sum ws :')'\n" +
-    "        | num\n" +
-    "num    <= <number>\n" +
+    "        | :'(' ws Sum ws :')'\n" +
+    "        | Num\n" +
+    "Num    <= <number>\n" +
     "ws     <: *[ \\t\\n\\r]";
 
 

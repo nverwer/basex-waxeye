@@ -39,13 +39,14 @@ public class WaxeyePEGParserTest
   }
 
 
+  /* Some non-terminals are capitalized, so the option 'use-waxeye-names' does not matter. */
   private final String calculatorGrammar =
-    "sum   <- prod *(ws [+-] ws prod)\n" +
-    "prod  <- unary *(ws [*/] ws unary)\n" +
+    "Sum   <- Prod *(ws [+-] ws Prod)\n" +
+    "Prod  <- unary *(ws [*/] ws unary)\n" +
     "unary <= '-' ws unary\n" +
-    "       | :'(' ws sum ws :')'\n" +
-    "       | num\n" +
-    "num   <- +[0-9] ?('.' +[0-9])\n" +
+    "       | :'(' ws Sum ws :')'\n" +
+    "       | Num\n" +
+    "Num   <- +[0-9] ?('.' +[0-9])\n" +
     "ws    <: *[ \\t\\n\\r]";
 
   private final String abcPalindromeGrammar =
@@ -170,7 +171,7 @@ public class WaxeyePEGParserTest
     SmaxDocument document = XmlString.toSmax("<p>palindrome abcba, abba?</p>");
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<p>palindrome <Palindrome>abcba</Palindrome>, <Palindrome>abba</Palindrome>?</p>";
+    String expectedOutput = "<p>palindrome <palindrome>abcba</palindrome>, <palindrome>abba</palindrome>?</p>";
     assertEquals(expectedOutput, output);
   }
 
@@ -195,7 +196,7 @@ public class WaxeyePEGParserTest
     SmaxDocument document = XmlString.toSmax("<p>abcbaabaaba</p>");
     parser.scan(document);
     String output = simplify(document);
-    String expectedOutput = "<p><Palindrome>abcba</Palindrome><Palindrome>abaaba</Palindrome></p>";
+    String expectedOutput = "<p><palindrome>abcba</palindrome><palindrome>abaaba</palindrome></p>";
     assertEquals(expectedOutput, output);
   }
 
@@ -203,6 +204,7 @@ public class WaxeyePEGParserTest
   void test_MatchWholeWords_1() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
+    options.put("use-waxeye-names", "true");
     WaxeyePEGParser parser = new WaxeyePEGParser(abcPalindromeGrammar, options, logger);
     SmaxDocument document = XmlString.toSmax("<p>[abcbaabba]</p>");
     parser.scan(document);
@@ -216,6 +218,7 @@ public class WaxeyePEGParserTest
   {
     Map<String, String> options = new HashMap<String, String>();
     options.put("match-whole-words", "true");
+    options.put("use-waxeye-names", "true");
     WaxeyePEGParser parser = new WaxeyePEGParser(abcPalindromeGrammar, options, logger);
     SmaxDocument document = XmlString.toSmax("<p>[abcbaabba]</p>");
     parser.scan(document);
@@ -228,6 +231,7 @@ public class WaxeyePEGParserTest
   void test_Grammar_File_1() throws Exception
   {
     Map<String, String> options = new HashMap<String, String>();
+    options.put("use-waxeye-names", "true");
     ClassLoader classLoader = getClass().getClassLoader();
     URL grammar = classLoader.getResource("palindrome.waxeye");
     WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);
@@ -243,6 +247,7 @@ public class WaxeyePEGParserTest
   {
     Map<String, String> options = new HashMap<String, String>();
     options.put("modular", "true");
+    options.put("use-waxeye-names", "true");
     ClassLoader classLoader = getClass().getClassLoader();
     URL grammar = classLoader.getResource("modular.waxeye");
     WaxeyePEGParser parser = new WaxeyePEGParser(grammar, options, logger);

@@ -63,6 +63,7 @@ The `peg:waxeye-peg-parser` function accepts the following options:
 * `cache` Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.
 * `parse-errors` Set to true to include errors in the output and not trigger an exception. (Default is false.)
 * `normalize` Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)
+* `use-waxeye-names` Set to true to capitalize non-terminal names. This is what older versions of Waxeye do. (Default is false). Before version 1.1.0, only capitalized Waxeye names could be used.
 * `cache` Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.
 * `namespace-prefix` The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
 * `namespace-uri` The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace). This option must be present if the 'namespace-prefix' option is defined.

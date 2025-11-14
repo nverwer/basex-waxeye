@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -23,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -39,6 +42,7 @@ import org.waxeye.ast.IASTVisitor;
 import org.waxeye.ast.IChar;
 import org.waxeye.ast.IEmpty;
 import org.waxeye.ast.IPreParsedNonTerminal;
+import org.waxeye.ast.Labeled;
 import org.waxeye.ast.Position;
 import org.waxeye.input.IParserInput;
 import org.waxeye.parser.ParseError;
@@ -64,10 +68,11 @@ import org.waxeye.parser.Parser;
  *       <li>cache Set to true to cache the generated parser. Only parsers generated from grammars stored on the file system can be cached.</li>
  *       <li>parse-errors Set to true to include errors in the output and not trigger an exception. (Default is false.)</li>
  *       <li>normalize Set to true if characters in the input must be converted to low ASCII characters, removing diacritics and ligatures. (Default is false.)</li>
+ *       <li>use-waxeye-names Set to true to capitalize non-terminal names. This is what older versions of Waxeye do. (Default is false).  Before version 1.1.0, only capitalized Waxeye names could be used.</li>
  *       <li>show-parse-tree Not yet implemented. Set to true to show the parse tree in an XML comment in the output. (Default is false.)</li>
- *       <li>namespace-prefix The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).
+ *       <li>namespace-prefix The namespace prefix used for elements that are inserted for non-terminals. Default is empty (no prefix).</li>
  *       <li>namespace-uri The namespace URI used for elements that are inserted for non-terminals. Default is empty (no namespace).
- *           This option must be present if the 'namespace-prefix' option is defined.
+ *           This option must be present if the 'namespace-prefix' option is defined.</li>
  *       <li>debug Set to true to enable debugging in the Waxeye parser. Default is false.</li>
  *     </ul>
  *   </li>
@@ -117,6 +122,7 @@ public class WaxeyePEGParser
   private boolean showParseErrors;
   private boolean showParseTree;
   private boolean normalize;
+  private boolean useWaxeyeNames;
   private String namespacePrefix;
   private String namespaceUri;
   private boolean debug;
@@ -173,6 +179,7 @@ public class WaxeyePEGParser
     this.showParseErrors = getOption(options, "parse-errors", false);
     this.showParseTree = getOption(options, "show-parse-tree", false);
     this.normalize = getOption(options, "normalize", false);
+    this.useWaxeyeNames = getOption(options, "use-waxeye-names", false);
     this.namespacePrefix = getOption(options, "namespace-prefix", null);
     this.namespaceUri = getOption(options, "namespace-uri", null);
     this.debug = getOption(options, "debug", false);
@@ -308,7 +315,7 @@ public class WaxeyePEGParser
         waxeyeOutput.append(line + "\n");
       }
       if (waxeyeProcess.exitValue() != 0) {
-        throw new QueryException("Waxeye process exited with error code: "+waxeyeProcess.exitValue());
+        throw new QueryException("Waxeye process exited with error code: "+waxeyeProcess.exitValue()+"\n"+waxeyeOutput.toString());
       }
     } catch (Throwable ex) {
       logger.error("Error compiling waxeye grammar ["+grammarFilePath+"]:\n"+ex.getMessage()+"\n"+waxeyeOutput.toString());
@@ -349,11 +356,16 @@ public class WaxeyePEGParser
       //List<String> classpathEntries;
       //options.add("-classpath");
       //options.add(String.join(System.getProperty("path.separator"), classpathEntries));
-      JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
+      StringWriter compilerOutput = new StringWriter();
+      JavaCompiler.CompilationTask task = compiler.getTask(compilerOutput, fileManager, diagnostics, options, null, compilationUnits);
       boolean success = task.call(); // see https://34codefactory.medium.com/java-how-to-dynamically-compile-and-load-external-java-classes-code-factory-dd517eec9b3
       fileManager.close();
       if (!success) {
-        throw new QueryException("Some generated Java files had compilation errors.");
+    	String javaSources =  StreamSupport.stream(compilationUnits.spliterator(), false).map((JavaFileObject file) -> file.getName()).collect(Collectors.joining(", "));
+    	String diagnosticsOutput = diagnostics.getDiagnostics().stream().
+    			map(diagnostic -> diagnostic.getSource().getName()+" l."+diagnostic.getLineNumber()+": "+diagnostic.getMessage(null)).
+    			collect(Collectors.joining(", "));
+        throw new QueryException("Some generated Java files had compilation errors. The Java sources are "+javaSources+".\n"+diagnosticsOutput+"\n"+compilerOutput.toString());
       }
       URLClassLoader urlClassLoader = URLClassLoader.newInstance(new URL[] {javaCodeDir.toURI().toURL()});
       Parser<?> parser = (Parser<?>) urlClassLoader.loadClass("Parser").getConstructor().newInstance();
@@ -629,7 +641,7 @@ public class WaxeyePEGParser
     @Override
     public void visitAST(IAST<?> node) {
       Position pos = node.getPosition();
-      String localName = node.getType().toString();
+      String localName = useWaxeyeNames ? node.getType().toString() : ((Labeled)node.getType()).getLabel();
       SmaxElement nonTerminalElement =
         ( namespaceUri == null )
         ? new SmaxElement(localName)

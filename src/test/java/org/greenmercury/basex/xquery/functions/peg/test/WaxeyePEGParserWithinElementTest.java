@@ -38,13 +38,14 @@ public class WaxeyePEGParserWithinElementTest
   }
 
 
+  /* Some non-terminals are capitalized, so the option 'use-waxeye-names' does not matter. */
   private final String calculatorGrammar =
-    "sum   <= prod *(ws [+-] ws prod)\n" +
-    "prod  <= unary *(ws [*/] ws unary)\n" +
+    "Sum   <= Prod *(ws [+-] ws Prod)\n" +
+    "Prod  <= unary *(ws [*/] ws unary)\n" +
     "unary <= '-' ws unary\n" +
-    "       | :'(' ws sum ws :')'\n" +
-    "       | num\n" +
-    "num   <- +[0-9] ?('.' +[0-9])\n" +
+    "       | :'(' ws Sum ws :')'\n" +
+    "       | Num\n" +
+    "Num   <- +[0-9] ?('.' +[0-9])\n" +
     "ws    <: *[ \\t\\n\\r]";
 
   @Test
